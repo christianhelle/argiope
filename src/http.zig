@@ -44,49 +44,35 @@ pub const FetchOptions = struct {
 /// Fetch a URL via GET, following redirects. Returns response with body.
 /// Caller owns the returned Response and must call deinit().
 pub fn fetch(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOptions) !Response {
-    const uri = std.Uri.parse(url_str) catch return error.InvalidUrl;
+    _ = options;
 
-    var server_header_buf: [16 * 1024]u8 = undefined;
-    var client: std.http.Client = .{ .allocator = allocator, .server_header_buffer = &server_header_buf };
+    var client: std.http.Client = .{ .allocator = allocator };
     defer client.deinit();
 
-    var req = client.open(.GET, uri, .{
-        .redirect_behavior = if (options.max_redirects > 0)
-            .{ .limited = options.max_redirects }
-        else
-            .unresolved,
-    }) catch return error.ConnectionFailed;
+    const uri = std.Uri.parse(url_str) catch return error.InvalidUrl;
+
+    var req = client.request(.GET, uri, .{}) catch return error.ConnectionFailed;
     defer req.deinit();
 
-    req.send() catch return error.ConnectionFailed;
-    req.wait() catch return error.ConnectionFailed;
+    req.sendBodiless() catch return error.ConnectionFailed;
 
-    const status: u16 = @intFromEnum(req.status);
+    var redirect_buf: [8 * 1024]u8 = undefined;
+    var response = req.receiveHead(&redirect_buf) catch return error.ConnectionFailed;
 
-    // Extract content-type
-    const content_type: ?[]u8 = blk: {
-        const ct_header = req.response.content_type orelse break :blk null;
-        const ct_str = switch (ct_header) {
-            .raw => |r| r,
-            .percent_encoded => |p| p,
-        };
-        break :blk try allocator.dupe(u8, ct_str);
-    };
+    const status: u16 = @intFromEnum(response.head.status);
+
+    // Extract content-type before reader invalidates strings
+    const content_type: ?[]u8 = if (response.head.content_type) |ct|
+        allocator.dupe(u8, ct) catch null
+    else
+        null;
     errdefer if (content_type) |ct| allocator.free(ct);
 
     // Read response body
-    var body_list: std.ArrayListUnmanaged(u8) = .empty;
-    errdefer body_list.deinit(allocator);
-
-    var read_buf: [8192]u8 = undefined;
-    while (true) {
-        const n = req.read(&read_buf) catch break;
-        if (n == 0) break;
-        if (body_list.items.len + n > options.max_body_size) break;
-        try body_list.appendSlice(allocator, read_buf[0..n]);
-    }
-
-    const body = try body_list.toOwnedSlice(allocator);
+    var transfer_buf: [8192]u8 = undefined;
+    const reader = response.reader(&transfer_buf);
+    const body = reader.allocRemaining(allocator, .unlimited) catch
+        (allocator.dupe(u8, "") catch return error.ConnectionFailed);
 
     return Response{
         .status = status,
@@ -96,27 +82,19 @@ pub fn fetch(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOp
     };
 }
 
-/// Check if a URL is reachable by sending a GET request and reading only headers.
+/// Check if a URL is reachable by sending a GET request.
 /// Returns the HTTP status code, or error if connection fails.
 pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOptions) !u16 {
-    const uri = std.Uri.parse(url_str) catch return error.InvalidUrl;
+    _ = options;
 
-    var server_header_buf: [16 * 1024]u8 = undefined;
-    var client: std.http.Client = .{ .allocator = allocator, .server_header_buffer = &server_header_buf };
+    var client: std.http.Client = .{ .allocator = allocator };
     defer client.deinit();
 
-    var req = client.open(.GET, uri, .{
-        .redirect_behavior = if (options.max_redirects > 0)
-            .{ .limited = options.max_redirects }
-        else
-            .unresolved,
+    const result = client.fetch(.{
+        .location = .{ .url = url_str },
     }) catch return error.ConnectionFailed;
-    defer req.deinit();
 
-    req.send() catch return error.ConnectionFailed;
-    req.wait() catch return error.ConnectionFailed;
-
-    return @intFromEnum(req.status);
+    return @intFromEnum(result.status);
 }
 
 /// Check if a content-type header indicates HTML content.
