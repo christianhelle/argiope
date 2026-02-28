@@ -55,4 +55,5 @@ fn printVersion() !void {
 test "imports compile" {
     _ = @import("url.zig");
     _ = @import("http.zig");
+    _ = @import("html.zig");
 }
