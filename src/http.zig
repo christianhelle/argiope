@@ -75,18 +75,18 @@ pub fn fetch(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOp
     errdefer if (content_type) |ct| allocator.free(ct);
 
     // Read response body
-    var body_list = std.ArrayList(u8).init(allocator);
-    errdefer body_list.deinit();
+    var body_list: std.ArrayListUnmanaged(u8) = .empty;
+    errdefer body_list.deinit(allocator);
 
     var read_buf: [8192]u8 = undefined;
     while (true) {
         const n = req.read(&read_buf) catch break;
         if (n == 0) break;
         if (body_list.items.len + n > options.max_body_size) break;
-        try body_list.appendSlice(read_buf[0..n]);
+        try body_list.appendSlice(allocator, read_buf[0..n]);
     }
 
-    const body = try body_list.toOwnedSlice();
+    const body = try body_list.toOwnedSlice(allocator);
 
     return Response{
         .status = status,
