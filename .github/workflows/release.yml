@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+env:
+  VERSION: "0.1.${{ github.run_number }}"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update snapcraft.yaml version
+        run: |
+          sed -i "s/^version: .*/version: ${{ env.VERSION }}/" snapcraft.yaml
+
+      - name: Commit, tag, and push
+        run: |
+          git config --global user.name "Continuous Integration"
+          git config --global user.email "username@users.noreply.github.com"
+          git add snapcraft.yaml
+          git commit -m "Bump up snapcraft version to v${{ env.VERSION }}"
+          git push origin HEAD:main
+
+  build:
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-linux
+            os: ubuntu-latest
+            artifact: zigcrawler-linux-x86_64
+          - target: aarch64-linux
+            os: ubuntu-latest
+            artifact: zigcrawler-linux-aarch64
+          - target: x86_64-macos
+            os: macos-latest
+            artifact: zigcrawler-macos-x86_64
+          - target: aarch64-macos
+            os: macos-latest
+            artifact: zigcrawler-macos-aarch64
+          - target: x86_64-windows
+            os: windows-latest
+            artifact: zigcrawler-windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Build
+        run: zig build -Doptimize=ReleaseFast -Dtarget=${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: tar czf ${{ matrix.artifact }}.tar.gz -C zig-out/bin zigcrawler
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path zig-out\bin\zigcrawler.exe -DestinationPath ${{ matrix.artifact }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}.tar.gz
+            ${{ matrix.artifact }}.zip
+
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          generate_release_notes: true
+          files: |
+            *.tar.gz
+            *.zip
