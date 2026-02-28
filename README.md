@@ -9,10 +9,35 @@ A web crawler for broken-link detection and image downloading, written in [Zig](
 
 - Crawl websites and detect broken links (4xx/5xx/timeout)
 - Download images from web pages to organized directories
-- Configurable crawl depth, timeouts, and rate limiting
-- Zero external dependencies
+- BFS traversal with configurable depth, timeouts, and rate limiting
+- Domain-restricted crawling with same-origin checks
+- Lightweight HTML scanner for link and image extraction
+- URL normalization and relative-to-absolute resolution
+- Zero external dependencies — uses only `std`
 - Single static binary — no runtime needed
 - Cross-platform: Linux, macOS, Windows
+
+## Architecture
+
+```
+main.zig  →  cli.zig  →  crawler.zig  →  http.zig
+                              ↓              ↓
+                         html.zig       url.zig
+                              ↓
+                    link_checker.zig  (check mode)
+                    downloader.zig   (download mode)
+```
+
+| Module | Responsibility |
+|---|---|
+| `main.zig` | Entry point; `GeneralPurposeAllocator` with leak detection |
+| `cli.zig` | CLI argument parsing for `check` and `download` subcommands |
+| `url.zig` | URL parsing (wraps `std.Uri`), normalization, resolution, same-origin |
+| `http.zig` | HTTP client wrapper using `std.http.Client` |
+| `html.zig` | HTML scanner extracting `<a href>`, `<img src>`, `<link>`, `<script>`, `<iframe>`, `srcset` |
+| `crawler.zig` | BFS crawl engine with visited set, depth limiting, rate limiting |
+| `link_checker.zig` | Broken link reporter with tabular output |
+| `downloader.zig` | Image downloader with directory structure |
 
 ## Installation
 
@@ -45,12 +70,35 @@ zigcrawler check https://example.com
 zigcrawler check https://example.com --depth 5 --timeout 15
 ```
 
+Output includes a table of broken links with status codes and a summary:
+
+```
+Crawling https://example.com (depth=3, timeout=10s)...
+
+------------------------------------------------------------------------------
+Status   Type       URL
+------------------------------------------------------------------------------
+404      internal   https://example.com/missing-page
+timeout  external   https://dead-link.example.org/page
+------------------------------------------------------------------------------
+
+Summary:
+  Total URLs checked: 42
+  OK:                 40
+  Broken:             1
+  Errors:             1
+  Internal:           30
+  External:           12
+```
+
 ### Download images
 
 ```sh
 zigcrawler download https://example.com/gallery -o ./images
-zigcrawler download https://manga-site.com/title/chapter1 -o ./manga/title/ch01
+zigcrawler download https://manga-site.com/title --depth 2 -o ./manga
 ```
+
+Images are saved to `output_dir/page_N/image_N.ext` where the extension is derived from the source URL.
 
 ### Options
 
@@ -68,6 +116,24 @@ Options:
   -o, --output DIR  Output directory for downloads (default: ./download)
   -h, --help        Show help
   -v, --version     Show version
+```
+
+## Development
+
+```sh
+# Build
+zig build
+
+# Run tests
+zig build test
+
+# Build release
+zig build -Doptimize=ReleaseFast
+
+# Or use Make
+make build
+make test
+make clean
 ```
 
 ## License
