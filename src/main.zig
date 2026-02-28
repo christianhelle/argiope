@@ -52,4 +52,6 @@ fn printVersion() !void {
     try fw.interface.flush();
 }
 
-test "imports compile" {}
+test "imports compile" {
+    _ = @import("url.zig");
+}
