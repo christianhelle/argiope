@@ -11,7 +11,7 @@ pub const CrawlResult = struct {
     error_msg: ?[]u8,
 
     pub fn deinit(self: *CrawlResult, allocator: std.mem.Allocator) void {
-        allocator.free(self.url);
+        if (self.url.len > 0) allocator.free(self.url);
         if (self.error_msg) |msg| allocator.free(msg);
     }
 };
@@ -114,8 +114,15 @@ pub const Crawler = struct {
         };
 
         var response = http_mod.fetch(self.allocator, url_str, fetch_opts) catch |err| {
+            const url_copy = self.allocator.dupe(u8, url_str) catch return CrawlResult{
+                .url = &.{},
+                .status = 0,
+                .links_found = 0,
+                .is_internal = is_internal,
+                .error_msg = null,
+            };
             return CrawlResult{
-                .url = self.allocator.dupe(u8, url_str) catch &.{},
+                .url = url_copy,
                 .status = 0,
                 .links_found = 0,
                 .is_internal = is_internal,
@@ -130,7 +137,22 @@ pub const Crawler = struct {
         if (is_internal and depth < self.options.max_depth and
             (http_mod.isHtmlContent(response.content_type) or response.content_type == null))
         {
-            const links = html_mod.extractLinks(self.allocator, response.body) catch &.{};
+            const links = html_mod.extractLinks(self.allocator, response.body) catch {
+                const url_copy = self.allocator.dupe(u8, url_str) catch return CrawlResult{
+                    .url = &.{},
+                    .status = response.status,
+                    .links_found = 0,
+                    .is_internal = is_internal,
+                    .error_msg = null,
+                };
+                return CrawlResult{
+                    .url = url_copy,
+                    .status = response.status,
+                    .links_found = 0,
+                    .is_internal = is_internal,
+                    .error_msg = null,
+                };
+            };
             defer self.allocator.free(links);
             links_found = links.len;
 
@@ -165,8 +187,15 @@ pub const Crawler = struct {
             }
         }
 
+        const url_copy = self.allocator.dupe(u8, url_str) catch return CrawlResult{
+            .url = &.{},
+            .status = response.status,
+            .links_found = links_found,
+            .is_internal = is_internal,
+            .error_msg = null,
+        };
         return CrawlResult{
-            .url = self.allocator.dupe(u8, url_str) catch &.{},
+            .url = url_copy,
             .status = response.status,
             .links_found = links_found,
             .is_internal = is_internal,
