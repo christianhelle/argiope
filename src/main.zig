@@ -1,6 +1,7 @@
 const std = @import("std");
 const cli = @import("cli.zig");
 const link_checker = @import("link_checker.zig");
+const downloader = @import("downloader.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -40,9 +41,8 @@ pub fn main() !void {
                 try cli.printHelp();
                 std.process.exit(1);
             }
-            // TODO: implement downloader
-            cli.printError("'download' command not yet implemented");
-            std.process.exit(1);
+            const exit_code = try downloader.run(allocator, opts);
+            if (exit_code != 0) std.process.exit(exit_code);
         },
     }
 }
@@ -54,4 +54,5 @@ test "imports compile" {
     _ = @import("cli.zig");
     _ = @import("crawler.zig");
     _ = @import("link_checker.zig");
+    _ = @import("downloader.zig");
 }
