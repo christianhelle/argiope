@@ -1,0 +1,40 @@
+name: zigcrawler
+base: core22
+version: 0.1.0
+summary: A web crawler for broken-link detection and image downloading
+description: |
+  zigcrawler crawls websites to detect broken links and download images.
+  It supports configurable crawl depth, request timeouts, and rate limiting.
+  Images can be saved to an organized directory structure for manga archival.
+
+grade: stable
+confinement: strict
+
+apps:
+  zigcrawler:
+    command: bin/zigcrawler
+    plugs:
+      - home
+      - network
+      - removable-media
+
+parts:
+  zig:
+    plugin: nil
+    build-packages:
+      - curl
+      - xz-utils
+    override-build: |
+      snap install zig --classic --beta
+
+  zigcrawler:
+    after: [zig]
+    plugin: nil
+    source: .
+    override-build: |
+      export PATH="$SNAPCRAFT_STAGE/zig:$PATH"
+      zig build -Doptimize=ReleaseFast
+      mkdir -p $SNAPCRAFT_PART_INSTALL/bin
+      cp zig-out/bin/zigcrawler $SNAPCRAFT_PART_INSTALL/bin/
+    stage-packages:
+      - libc6
