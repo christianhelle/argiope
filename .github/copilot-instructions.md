@@ -1,6 +1,6 @@
 # zigcrawler – Copilot Instructions
 
-`zigcrawler` is a web crawler CLI tool written in Zig (minimum version 0.15.2) for detecting broken links and downloading images from websites. It has no external dependencies.
+`zigcrawler` is a web crawler CLI tool written in Zig (minimum version 0.15.2) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`.
 
 ## Build, run, and test
 
@@ -9,6 +9,8 @@ zig build                          # compile → zig-out/bin/zigcrawler
 zig build run -- check <url>       # build + run link checker
 zig build run -- download <url>    # build + run image downloader
 zig build test                     # run all tests
+make build                         # alternative via Makefile
+make test
 ```
 
 ## Architecture
@@ -28,26 +30,37 @@ main.zig  →  cli.zig  →  crawler.zig  →  http.zig
 |---|---|
 | `main.zig` | Entry point; owns `GeneralPurposeAllocator`; wires modules together |
 | `cli.zig` | CLI argument parsing for `check` and `download` subcommands |
-| `url.zig` | URL normalization, relative-to-absolute resolution, same-origin checks |
-| `http.zig` | HTTP client wrapper: GET requests, status codes, redirect following, timeouts |
-| `html.zig` | Lightweight HTML scanner: extracts `<a href>` and `<img src>` attributes |
-| `crawler.zig` | BFS crawl engine: visited set, depth limiting, domain restriction |
+| `url.zig` | URL parsing (wraps `std.Uri`), normalization, relative-to-absolute resolution, same-origin |
+| `http.zig` | HTTP client wrapper using `std.http.Client` with `request/sendBodiless/receiveHead/reader` |
+| `html.zig` | HTML scanner: extracts `<a href>`, `<img src>`, `<link href>`, `<script src>`, `<iframe src>`, `srcset` |
+| `crawler.zig` | BFS crawl engine: visited `StringHashMap`, depth limiting, domain restriction, rate limiting |
 | `link_checker.zig` | Broken link reporter: collects URLs, checks status, outputs tabular report |
-| `downloader.zig` | File downloader: saves images to organized directory structure |
+| `downloader.zig` | Image downloader: saves images to `output_dir/page_N/image_N.ext` structure |
+
+## Zig 0.15 API Notes
+
+These are critical differences from older Zig versions:
+
+- **stdout/stderr**: `std.fs.File.stdout().writer(&buf)` → access via `.interface.print()` and `.interface.flush()`
+- **ArrayList**: Use `std.ArrayListUnmanaged(T)` with `.empty` init. Methods require explicit allocator: `.append(allocator, item)`, `.toOwnedSlice(allocator)`, `.deinit(allocator)`
+- **HashMap**: Use `std.StringHashMapUnmanaged(V)` with `.empty` init. Same explicit allocator pattern.
+- **Thread.sleep**: `std.Thread.sleep(nanoseconds)` — NOT `std.time.sleep()`
+- **HTTP Client**: No `server_header_buffer`. Use `client.request(.GET, uri, .{})` → `req.sendBodiless()` → `req.receiveHead(&buf)` → `response.reader(&buf)` → `reader.allocRemaining(allocator, .unlimited)`
+- **Reader**: New vtable-based `std.Io.Reader`. Key methods: `allocRemaining()`, `streamRemaining()`, `discardRemaining()`. No `.read()` method.
+- **File Reader**: `file.reader(&buf)` returns struct with `.interface` field (the `std.Io.Reader`). Use `readFileAlloc()` on Dir for simple reads.
 
 ## Key conventions
 
-**Tests are inline.** Every `.zig` file that has logic contains `test` blocks directly in that file.
-`main.zig` has a `test "imports compile"` block that imports all other modules,
-ensuring the test binary transitively covers all inline tests when `src/main.zig` is the test root.
+**Tests are inline.** Every `.zig` file with logic contains `test` blocks.
+`main.zig` has a `test "imports compile"` block that imports all modules,
+ensuring the test binary transitively covers all inline tests.
 
-**Memory ownership is explicit.** All allocations go through `GeneralPurposeAllocator` for leak detection.
-HTTP response bodies are allocated by `http.zig` and freed by the caller.
-URL lists from the HTML parser use `ArrayList` and are freed by the caller.
-The visited set uses a `HashMap` with owned key strings, freed on `deinit`.
+**Memory ownership is explicit.** All allocations go through `GeneralPurposeAllocator` (leak detection in debug).
+HTTP response bodies are allocated by `http.zig` and freed by the caller via `Response.deinit()`.
+Link slices from `html.extractLinks()` borrow from the input HTML — only the slice itself needs freeing.
+The visited set uses `StringHashMapUnmanaged` with owned key strings, freed on `Crawler.deinit()`.
+`CrawlResult.deinit()` skips freeing zero-length url slices (error fallback path).
 
-**Thread-safety model:** The crawler dispatches work via `Thread.Pool`. Shared state (visited set, results) is mutex-guarded.
+**Output buffering:** stdout uses a stack-allocated buffer via `std.fs.File.stdout().writer(&buf)`. Always call `flush()` after printing.
 
-**Output buffering:** stdout output uses a stack-allocated buffer passed to `std.fs.File.stdout().writer()`. Always call `flush()`.
-
-**Source control:** Commit progress to git in small logical chunks with clear one-liner messages. Do not change the committer to Copilot and do not add a Co-Author line.
+**Source control:** Commit in small logical chunks with clear one-liner messages. Do not add a Co-Author line.
