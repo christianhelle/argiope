@@ -54,4 +54,5 @@ test "imports compile" {
     _ = @import("http.zig");
     _ = @import("html.zig");
     _ = @import("cli.zig");
+    _ = @import("crawler.zig");
 }
