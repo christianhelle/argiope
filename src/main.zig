@@ -1,5 +1,6 @@
 const std = @import("std");
 const cli = @import("cli.zig");
+const link_checker = @import("link_checker.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -25,23 +26,20 @@ pub fn main() !void {
         .help => try cli.printHelp(),
         .version_cmd => try cli.printVersion(),
         .check => {
-            const url = opts.url orelse {
+            if (opts.url == null) {
                 cli.printError("missing URL argument for 'check' command");
                 try cli.printHelp();
                 std.process.exit(1);
-            };
-            _ = url;
-            // TODO: implement link checker
-            cli.printError("'check' command not yet implemented");
-            std.process.exit(1);
+            }
+            const exit_code = try link_checker.run(allocator, opts);
+            if (exit_code != 0) std.process.exit(exit_code);
         },
         .download => {
-            const url = opts.url orelse {
+            if (opts.url == null) {
                 cli.printError("missing URL argument for 'download' command");
                 try cli.printHelp();
                 std.process.exit(1);
-            };
-            _ = url;
+            }
             // TODO: implement downloader
             cli.printError("'download' command not yet implemented");
             std.process.exit(1);
@@ -55,4 +53,5 @@ test "imports compile" {
     _ = @import("html.zig");
     _ = @import("cli.zig");
     _ = @import("crawler.zig");
+    _ = @import("link_checker.zig");
 }
