@@ -1,6 +1,5 @@
 const std = @import("std");
-
-const version = "0.1.0";
+const cli = @import("cli.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -10,50 +9,49 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len < 2) {
-        try printUsage();
-        return;
+    const opts = cli.parseArgs(args) catch |err| {
+        const msg = switch (err) {
+            cli.ParseError.MissingUrl => "missing URL argument",
+            cli.ParseError.InvalidNumber => "invalid numeric argument",
+            cli.ParseError.UnknownOption => "unknown option",
+            cli.ParseError.UnknownCommand => "unknown command (use 'check' or 'download')",
+        };
+        cli.printError(msg);
+        try cli.printHelp();
+        std.process.exit(1);
+    };
+
+    switch (opts.command) {
+        .help => try cli.printHelp(),
+        .version_cmd => try cli.printVersion(),
+        .check => {
+            const url = opts.url orelse {
+                cli.printError("missing URL argument for 'check' command");
+                try cli.printHelp();
+                std.process.exit(1);
+            };
+            _ = url;
+            // TODO: implement link checker
+            cli.printError("'check' command not yet implemented");
+            std.process.exit(1);
+        },
+        .download => {
+            const url = opts.url orelse {
+                cli.printError("missing URL argument for 'download' command");
+                try cli.printHelp();
+                std.process.exit(1);
+            };
+            _ = url;
+            // TODO: implement downloader
+            cli.printError("'download' command not yet implemented");
+            std.process.exit(1);
+        },
     }
-
-    const cmd = args[1];
-    if (std.mem.eql(u8, cmd, "-h") or std.mem.eql(u8, cmd, "--help")) {
-        try printUsage();
-    } else if (std.mem.eql(u8, cmd, "-v") or std.mem.eql(u8, cmd, "--version")) {
-        try printVersion();
-    } else {
-        try printUsage();
-    }
-}
-
-fn printUsage() !void {
-    var buf: [4096]u8 = undefined;
-    var fw = std.fs.File.stdout().writer(&buf);
-    try fw.interface.print(
-        \\zigcrawler {s} — a web crawler for broken-link detection and image downloading
-        \\
-        \\Usage: zigcrawler <command> [options]
-        \\
-        \\Commands:
-        \\  check <url>       Crawl a website and report broken links
-        \\  download <url>    Download images from a website
-        \\
-        \\Options:
-        \\  -h, --help        Show this help
-        \\  -v, --version     Show version
-        \\
-    , .{version});
-    try fw.interface.flush();
-}
-
-fn printVersion() !void {
-    var buf: [256]u8 = undefined;
-    var fw = std.fs.File.stdout().writer(&buf);
-    try fw.interface.print("zigcrawler {s}\n", .{version});
-    try fw.interface.flush();
 }
 
 test "imports compile" {
     _ = @import("url.zig");
     _ = @import("http.zig");
     _ = @import("html.zig");
+    _ = @import("cli.zig");
 }
