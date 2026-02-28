@@ -1,0 +1,12 @@
+.{
+    .name = .zigcrawler,
+    .version = "0.0.0",
+    .fingerprint = 0x614d62a63ad48451,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
