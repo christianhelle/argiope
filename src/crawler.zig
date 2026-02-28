@@ -101,7 +101,7 @@ pub const Crawler = struct {
 
             // Rate limiting
             if (self.options.delay_ms > 0) {
-                std.time.sleep(@as(u64, self.options.delay_ms) * std.time.ns_per_ms);
+                std.Thread.sleep(@as(u64, self.options.delay_ms) * std.time.ns_per_ms);
             }
         }
     }
