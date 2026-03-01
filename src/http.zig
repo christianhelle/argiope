@@ -43,12 +43,8 @@ pub const FetchOptions = struct {
 
 /// Fetch a URL via GET, following redirects. Returns response with body.
 /// Caller owns the returned Response and must call deinit().
-pub fn fetch(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOptions) !Response {
-    _ = options;
-
-    var client: std.http.Client = .{ .allocator = allocator };
-    defer client.deinit();
-
+/// Reuses the provided client for connection pooling across requests.
+pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []const u8, options: FetchOptions) !Response {
     const uri = std.Uri.parse(url_str) catch return error.InvalidUrl;
 
     var req = client.request(.GET, uri, .{
@@ -58,7 +54,7 @@ pub fn fetch(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOp
 
     req.sendBodiless() catch return error.ConnectionFailed;
 
-    var redirect_buf: [8 * 1024]u8 = undefined;
+    var redirect_buf: [16 * 1024]u8 = undefined;
     var response = req.receiveHead(&redirect_buf) catch return error.ConnectionFailed;
 
     const status: u16 = @intFromEnum(response.head.status);
@@ -70,10 +66,10 @@ pub fn fetch(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOp
         null;
     errdefer if (content_type) |ct| allocator.free(ct);
 
-    // Read response body
+    // Read response body up to max_body_size to prevent OOM on large responses
     var transfer_buf: [8192]u8 = undefined;
     const reader = response.reader(&transfer_buf);
-    const body = reader.allocRemaining(allocator, .unlimited) catch
+    const body = reader.allocRemaining(allocator, std.io.Limit.limited(options.max_body_size)) catch
         (allocator.dupe(u8, "") catch return error.ConnectionFailed);
 
     return Response{

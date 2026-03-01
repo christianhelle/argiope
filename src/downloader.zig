@@ -102,7 +102,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         const fetch_opts = http_mod.FetchOptions{
             .timeout_ms = opts.timeout_ms,
         };
-        var response = http_mod.fetch(allocator, r.url, fetch_opts) catch continue;
+        var response = http_mod.fetch(&c.client, allocator, r.url, fetch_opts) catch continue;
         defer response.deinit();
 
         if (!http_mod.isHtmlContent(response.content_type)) continue;
@@ -138,7 +138,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
             defer dir.close();
 
             // Download the image
-            var img_response = http_mod.fetch(allocator, img_url, fetch_opts) catch {
+            var img_response = http_mod.fetch(&c.client, allocator, img_url, fetch_opts) catch {
                 result.failed += 1;
                 continue;
             };

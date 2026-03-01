@@ -33,6 +33,7 @@ pub const Crawler = struct {
     results: std.ArrayListUnmanaged(CrawlResult),
     queue: std.ArrayListUnmanaged(QueueEntry),
     base_parsed: ?url_mod.Url,
+    client: std.http.Client,
 
     const QueueEntry = struct {
         url: []u8,
@@ -48,6 +49,7 @@ pub const Crawler = struct {
             .results = .empty,
             .queue = .empty,
             .base_parsed = url_mod.Url.parse(base_url) catch null,
+            .client = .{ .allocator = allocator },
         };
     }
 
@@ -69,6 +71,8 @@ pub const Crawler = struct {
             self.allocator.free(key.*);
         }
         self.visited.deinit(self.allocator);
+
+        self.client.deinit();
     }
 
     /// Run the crawl starting from the base URL.
@@ -78,7 +82,7 @@ pub const Crawler = struct {
         try self.queue.append(self.allocator, .{ .url = seed, .depth = 0 });
 
         while (self.queue.items.len > 0) {
-            const entry = self.queue.orderedRemove(0);
+            const entry = self.queue.swapRemove(0);
             defer self.allocator.free(entry.url);
 
             // Normalize the URL
@@ -122,7 +126,7 @@ pub const Crawler = struct {
             .max_body_size = self.options.max_body_size,
         };
 
-        var response = http_mod.fetch(self.allocator, url_str, fetch_opts) catch |err| {
+        var response = http_mod.fetch(&self.client, self.allocator, url_str, fetch_opts) catch |err| {
             const url_copy = self.allocator.dupe(u8, url_str) catch return CrawlResult{
                 .url = &.{},
                 .status = 0,
