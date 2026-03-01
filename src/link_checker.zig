@@ -30,6 +30,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         .max_depth = opts.depth,
         .timeout_ms = opts.timeout_ms,
         .delay_ms = opts.delay_ms,
+        .verbose = opts.verbose,
     });
     defer c.deinit();
 

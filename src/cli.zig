@@ -16,6 +16,7 @@ pub const Options = struct {
     timeout_ms: u32,
     delay_ms: u32,
     output_dir: []const u8,
+    verbose: bool,
 
     pub const defaults = Options{
         .command = .help,
@@ -24,6 +25,7 @@ pub const Options = struct {
         .timeout_ms = 10_000,
         .delay_ms = 100,
         .output_dir = "./download",
+        .verbose = false,
     };
 };
 
@@ -83,6 +85,8 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
             i += 1;
             if (i >= args.len) return ParseError.InvalidNumber;
             opts.delay_ms = std.fmt.parseInt(u32, args[i], 10) catch return ParseError.InvalidNumber;
+        } else if (std.mem.eql(u8, arg, "--verbose")) {
+            opts.verbose = true;
         } else if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
             i += 1;
             if (i >= args.len) return ParseError.UnknownOption;
@@ -117,6 +121,7 @@ pub fn printHelp() !void {
         \\  --timeout N           Request timeout in seconds (default: 10)
         \\  --delay N             Delay between requests in ms (default: 100)
         \\  -o, --output DIR      Output directory for downloads (default: ./download)
+        \\  --verbose             Print progress for each URL as it is crawled
         \\  -h, --help            Show this help
         \\  -v, --version         Show version
         \\
@@ -212,6 +217,14 @@ test "defaults are correct" {
     try std.testing.expect(d.timeout_ms == 10_000);
     try std.testing.expect(d.delay_ms == 100);
     try std.testing.expectEqualStrings("./download", d.output_dir);
+    try std.testing.expect(d.verbose == false);
+}
+
+test "parse verbose flag" {
+    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com", "--verbose" };
+    const opts = try parseArgs(args);
+    try std.testing.expect(opts.verbose == true);
+    try std.testing.expect(opts.command == .check);
 }
 
 test "help flag after command" {

@@ -22,6 +22,7 @@ pub const CrawlOptions = struct {
     delay_ms: u32 = 100,
     max_redirects: u8 = 5,
     max_body_size: usize = 10 * 1024 * 1024,
+    verbose: bool = false,
 };
 
 pub const Crawler = struct {
@@ -94,6 +95,14 @@ pub const Crawler = struct {
 
             // Check if internal
             const is_internal = self.isInternal(normalized);
+
+            // Verbose progress reporting
+            if (self.options.verbose) {
+                var pbuf: [2048]u8 = undefined;
+                var fw = std.fs.File.stderr().writer(&pbuf);
+                fw.interface.print("[{d} queued] Checking: {s}\n", .{ self.queue.items.len, normalized }) catch {};
+                fw.interface.flush() catch {};
+            }
 
             // Fetch the page
             const result = self.fetchPage(normalized, entry.depth, is_internal);
