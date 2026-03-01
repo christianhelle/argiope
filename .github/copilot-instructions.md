@@ -63,4 +63,13 @@ The visited set uses `StringHashMapUnmanaged` with owned key strings, freed on `
 
 **Output buffering:** stdout uses a stack-allocated buffer via `std.fs.File.stdout().writer(&buf)`. Always call `flush()` after printing.
 
-**Source control:** Commit in small logical chunks with clear one-liner messages. Do not add a Co-Author line.
+## Source Control and Documentation
+
+**Keep README in sync:** Every feature addition, change, or fix must update the README to reflect the current state of the application. Update usage examples, architecture diagrams, feature lists, or options as needed. The README is the source of truth for users.
+
+**Commits:** 
+- Make commits in small logical chunks with clear one-liner descriptions for a detailed progress history.
+- Use brief commit messages (one line only).
+- Always commit as the user (the actual developer), never create commits under fictional identities like "Copilot Agent" or similar.
+- **Never commit directly to the main branch.** If you detect that the current branch is `main`, create a feature branch (e.g., `feature/your-feature-name`) before making any commits.
+- Use clear, concise commit messages that describe the change in one sentence.
