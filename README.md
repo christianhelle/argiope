@@ -100,6 +100,26 @@ zigcrawler download https://manga-site.com/title --depth 2 -o ./manga
 
 Images are saved to `output_dir/page_N/image_N.ext` where the extension is derived from the source URL.
 
+### Verbose Mode
+
+For detailed progress output while crawling:
+
+```sh
+zigcrawler check https://example.com --verbose
+```
+
+Each URL will be printed as it is checked, showing the crawling progress in real-time.
+
+### Parallel Crawling
+
+For faster crawling on sites with many links, enable parallel crawling:
+
+```sh
+zigcrawler check https://example.com --parallel
+```
+
+This crawls multiple URLs concurrently for improved performance.
+
 ### Options
 
 ```
@@ -114,6 +134,8 @@ Options:
   --timeout N       Request timeout in seconds (default: 10)
   --delay N         Delay between requests in ms (default: 100)
   -o, --output DIR  Output directory for downloads (default: ./download)
+  --verbose         Print progress for each URL as it is crawled
+  --parallel        Crawl URLs in parallel for better performance
   -h, --help        Show help
   -v, --version     Show version
 ```
