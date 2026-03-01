@@ -23,7 +23,144 @@ pub const CrawlOptions = struct {
     max_redirects: u8 = 5,
     max_body_size: usize = 10 * 1024 * 1024,
     verbose: bool = false,
+    parallel: bool = false,
 };
+
+const QueueEntry = struct {
+    url: []u8,
+    depth: u16,
+};
+
+const ParallelWorkerCtx = struct {
+    crawler: *Crawler,
+    alloc: std.mem.Allocator,
+    mutex: *std.Thread.Mutex,
+    active: *std.atomic.Value(u32),
+};
+
+fn parallelWorker(ctx: ParallelWorkerCtx) void {
+    while (true) {
+        ctx.mutex.lock();
+        if (ctx.crawler.queue.items.len == 0) {
+            if (ctx.active.load(.monotonic) == 0) {
+                ctx.mutex.unlock();
+                return;
+            }
+            ctx.mutex.unlock();
+            std.Thread.sleep(1 * std.time.ns_per_ms);
+            continue;
+        }
+        const entry = ctx.crawler.queue.swapRemove(0);
+        _ = ctx.active.fetchAdd(1, .monotonic);
+        ctx.mutex.unlock();
+        defer {
+            ctx.alloc.free(entry.url);
+            _ = ctx.active.fetchSub(1, .release);
+        }
+
+        const normalized = url_mod.normalize(ctx.alloc, entry.url) catch continue;
+
+        ctx.mutex.lock();
+        if (ctx.crawler.visited.get(normalized) != null) {
+            ctx.mutex.unlock();
+            ctx.alloc.free(normalized);
+            continue;
+        }
+        ctx.crawler.visited.put(ctx.alloc, normalized, {}) catch {
+            ctx.mutex.unlock();
+            ctx.alloc.free(normalized);
+            continue;
+        };
+        ctx.mutex.unlock();
+
+        const is_internal = ctx.crawler.isInternal(normalized);
+
+        if (ctx.crawler.options.verbose) {
+            ctx.mutex.lock();
+            const q_len = ctx.crawler.queue.items.len;
+            ctx.mutex.unlock();
+            var pbuf: [2048]u8 = undefined;
+            var fw = std.fs.File.stderr().writer(&pbuf);
+            fw.interface.print("[{d} queued] Checking: {s}\n", .{ q_len, normalized }) catch {};
+            fw.interface.flush() catch {};
+        }
+
+        const fetch_opts = http_mod.FetchOptions{
+            .max_redirects = ctx.crawler.options.max_redirects,
+            .timeout_ms = ctx.crawler.options.timeout_ms,
+            .max_body_size = ctx.crawler.options.max_body_size,
+        };
+
+        var response = http_mod.fetch(&ctx.crawler.client, ctx.alloc, normalized, fetch_opts) catch |err| {
+            const url_copy = ctx.alloc.dupe(u8, normalized) catch &[_]u8{};
+            const err_copy = ctx.alloc.dupe(u8, @errorName(err)) catch null;
+            ctx.mutex.lock();
+            ctx.crawler.results.append(ctx.alloc, CrawlResult{
+                .url = @constCast(url_copy),
+                .status = 0,
+                .links_found = 0,
+                .is_internal = is_internal,
+                .error_msg = err_copy,
+            }) catch {};
+            ctx.mutex.unlock();
+            continue;
+        };
+        defer response.deinit();
+
+        var links_found: usize = 0;
+        var new_urls: std.ArrayListUnmanaged(QueueEntry) = .empty;
+        defer {
+            for (new_urls.items) |u| ctx.alloc.free(u.url);
+            new_urls.deinit(ctx.alloc);
+        }
+
+        if (is_internal and entry.depth < ctx.crawler.options.max_depth and
+            (http_mod.isHtmlContent(response.content_type) or response.content_type == null))
+        blk: {
+            const links = html_mod.extractLinks(ctx.alloc, response.body) catch break :blk;
+            defer ctx.alloc.free(links);
+            links_found = links.len;
+
+            for (links) |link| {
+                const resolved = url_mod.resolve(ctx.alloc, normalized, link.href) catch continue;
+                if (!url_mod.isHttp(resolved)) {
+                    ctx.alloc.free(resolved);
+                    continue;
+                }
+                const norm2 = url_mod.normalize(ctx.alloc, resolved) catch {
+                    ctx.alloc.free(resolved);
+                    continue;
+                };
+                ctx.alloc.free(resolved);
+                new_urls.append(ctx.alloc, .{ .url = norm2, .depth = entry.depth + 1 }) catch {
+                    ctx.alloc.free(norm2);
+                    continue;
+                };
+            }
+        }
+
+        const url_copy = ctx.alloc.dupe(u8, normalized) catch &[_]u8{};
+        ctx.mutex.lock();
+        ctx.crawler.results.append(ctx.alloc, CrawlResult{
+            .url = @constCast(url_copy),
+            .status = response.status,
+            .links_found = links_found,
+            .is_internal = is_internal,
+            .error_msg = null,
+        }) catch {};
+        for (new_urls.items) |u| {
+            if (ctx.crawler.visited.get(u.url) == null) {
+                ctx.crawler.queue.append(ctx.alloc, .{ .url = u.url, .depth = u.depth }) catch {
+                    ctx.alloc.free(u.url);
+                };
+            } else {
+                ctx.alloc.free(u.url);
+            }
+        }
+        new_urls.items.len = 0; // Ownership transferred or freed above
+        ctx.mutex.unlock();
+    }
+}
 
 pub const Crawler = struct {
     allocator: std.mem.Allocator,
@@ -34,11 +171,6 @@ pub const Crawler = struct {
     queue: std.ArrayListUnmanaged(QueueEntry),
     base_parsed: ?url_mod.Url,
     client: std.http.Client,
-
-    const QueueEntry = struct {
-        url: []u8,
-        depth: u16,
-    };
 
     pub fn init(allocator: std.mem.Allocator, base_url: []const u8, options: CrawlOptions) Crawler {
         return Crawler{
@@ -77,6 +209,8 @@ pub const Crawler = struct {
 
     /// Run the crawl starting from the base URL.
     pub fn crawl(self: *Crawler) !void {
+        if (self.options.parallel) return self.crawlParallel();
+
         // Seed the queue with the base URL
         const seed = try self.allocator.dupe(u8, self.base_url);
         try self.queue.append(self.allocator, .{ .url = seed, .depth = 0 });
@@ -117,6 +251,36 @@ pub const Crawler = struct {
                 std.Thread.sleep(@as(u64, self.options.delay_ms) * std.time.ns_per_ms);
             }
         }
+    }
+
+    /// Parallel crawl: processes queue entries concurrently using a thread pool.
+    fn crawlParallel(self: *Crawler) !void {
+        var ts_alloc = std.heap.ThreadSafeAllocator{ .child_allocator = self.allocator };
+        const alloc = ts_alloc.allocator();
+
+        const seed = try alloc.dupe(u8, self.base_url);
+        try self.queue.append(alloc, .{ .url = seed, .depth = 0 });
+
+        const cpu_count = std.Thread.getCpuCount() catch 4;
+        const num_threads = @min(cpu_count, 16);
+
+        var mutex = std.Thread.Mutex{};
+        var active = std.atomic.Value(u32).init(0);
+
+        const ctx = ParallelWorkerCtx{
+            .crawler = self,
+            .alloc = alloc,
+            .mutex = &mutex,
+            .active = &active,
+        };
+
+        const threads = try alloc.alloc(std.Thread, num_threads);
+        defer alloc.free(threads);
+
+        for (threads) |*t| {
+            t.* = try std.Thread.spawn(.{}, parallelWorker, .{ctx});
+        }
+        for (threads) |t| t.join();
     }
 
     fn fetchPage(self: *Crawler, url_str: []const u8, depth: u16, is_internal: bool) CrawlResult {
@@ -277,6 +441,7 @@ test "CrawlOptions defaults" {
     try std.testing.expect(opts.max_depth == 3);
     try std.testing.expect(opts.timeout_ms == 10_000);
     try std.testing.expect(opts.delay_ms == 100);
+    try std.testing.expect(opts.parallel == false);
 }
 
 test "CrawlResult deinit" {

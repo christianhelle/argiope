@@ -17,6 +17,7 @@ pub const Options = struct {
     delay_ms: u32,
     output_dir: []const u8,
     verbose: bool,
+    parallel: bool,
 
     pub const defaults = Options{
         .command = .help,
@@ -26,6 +27,7 @@ pub const Options = struct {
         .delay_ms = 100,
         .output_dir = "./download",
         .verbose = false,
+        .parallel = false,
     };
 };
 
@@ -87,6 +89,8 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
             opts.delay_ms = std.fmt.parseInt(u32, args[i], 10) catch return ParseError.InvalidNumber;
         } else if (std.mem.eql(u8, arg, "--verbose")) {
             opts.verbose = true;
+        } else if (std.mem.eql(u8, arg, "--parallel")) {
+            opts.parallel = true;
         } else if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
             i += 1;
             if (i >= args.len) return ParseError.UnknownOption;
@@ -122,6 +126,7 @@ pub fn printHelp() !void {
         \\  --delay N             Delay between requests in ms (default: 100)
         \\  -o, --output DIR      Output directory for downloads (default: ./download)
         \\  --verbose             Print progress for each URL as it is crawled
+        \\  --parallel            Crawl URLs in parallel for better performance
         \\  -h, --help            Show this help
         \\  -v, --version         Show version
         \\
@@ -225,6 +230,18 @@ test "parse verbose flag" {
     const opts = try parseArgs(args);
     try std.testing.expect(opts.verbose == true);
     try std.testing.expect(opts.command == .check);
+}
+
+test "parse parallel flag" {
+    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com", "--parallel" };
+    const opts = try parseArgs(args);
+    try std.testing.expect(opts.parallel == true);
+    try std.testing.expect(opts.command == .check);
+}
+
+test "parallel defaults to false" {
+    const d = Options.defaults;
+    try std.testing.expect(d.parallel == false);
 }
 
 test "help flag after command" {
