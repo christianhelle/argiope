@@ -40,6 +40,9 @@ const ParallelWorkerCtx = struct {
 };
 
 fn parallelWorker(ctx: ParallelWorkerCtx) void {
+    var client = std.http.Client{ .allocator = ctx.alloc };
+    defer client.deinit();
+
     while (true) {
         ctx.mutex.lock();
         if (ctx.crawler.queue.items.len == 0) {
@@ -93,7 +96,7 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
         };
 
         const t0 = std.time.milliTimestamp();
-        var response = http_mod.fetch(&ctx.crawler.client, ctx.alloc, normalized, fetch_opts) catch |err| {
+        var response = http_mod.fetch(&client, ctx.alloc, normalized, fetch_opts) catch |err| {
             const elapsed: u64 = @intCast(std.time.milliTimestamp() - t0);
             const url_copy = ctx.alloc.dupe(u8, normalized) catch &[_]u8{};
             const err_copy = ctx.alloc.dupe(u8, @errorName(err)) catch null;
@@ -106,6 +109,8 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
                 .error_msg = err_copy,
                 .elapsed_ms = elapsed,
             }) catch {};
+            ctx.crawler.checked_count += 1;
+            if (!ctx.crawler.options.verbose) ctx.crawler.printProgress(ctx.crawler.queue.items.len);
             ctx.mutex.unlock();
             continue;
         };
@@ -154,6 +159,8 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
             .error_msg = null,
             .elapsed_ms = elapsed_ms,
         }) catch {};
+        ctx.crawler.checked_count += 1;
+        if (!ctx.crawler.options.verbose) ctx.crawler.printProgress(ctx.crawler.queue.items.len);
         for (new_urls.items) |u| {
             if (ctx.crawler.visited.get(u.url) == null) {
                 ctx.crawler.queue.append(ctx.alloc, .{ .url = u.url, .depth = u.depth }) catch {
@@ -177,6 +184,7 @@ pub const Crawler = struct {
     queue: std.ArrayListUnmanaged(QueueEntry),
     base_parsed: ?url_mod.Url,
     client: std.http.Client,
+    checked_count: usize,
 
     pub fn init(allocator: std.mem.Allocator, base_url: []const u8, options: CrawlOptions) Crawler {
         return Crawler{
@@ -188,7 +196,25 @@ pub const Crawler = struct {
             .queue = .empty,
             .base_parsed = url_mod.Url.parse(base_url) catch null,
             .client = .{ .allocator = allocator },
+            .checked_count = 0,
         };
+    }
+
+    fn printProgress(self: *Crawler, queued: usize) void {
+        const spinners = "-\\|/";
+        const sp = spinners[self.checked_count % 4];
+        var pbuf: [256]u8 = undefined;
+        var fw = std.fs.File.stderr().writer(&pbuf);
+        fw.interface.print("\r  {c} {d} checked | {d} queued          ", .{ sp, self.checked_count, queued }) catch {};
+        fw.interface.flush() catch {};
+    }
+
+    fn clearProgress(self: *Crawler) void {
+        if (self.checked_count == 0) return;
+        var pbuf: [128]u8 = undefined;
+        var fw = std.fs.File.stderr().writer(&pbuf);
+        fw.interface.print("\r{s}\r", .{" " ** 60}) catch {};
+        fw.interface.flush() catch {};
     }
 
     pub fn deinit(self: *Crawler) void {
@@ -250,13 +276,17 @@ pub const Crawler = struct {
 
             // Fetch the page
             const result = self.fetchPage(normalized, entry.depth, is_internal);
+            self.checked_count += 1;
             try self.results.append(self.allocator, result);
+
+            if (!self.options.verbose) self.printProgress(self.queue.items.len);
 
             // Rate limiting
             if (self.options.delay_ms > 0) {
                 std.Thread.sleep(@as(u64, self.options.delay_ms) * std.time.ns_per_ms);
             }
         }
+        if (!self.options.verbose) self.clearProgress();
     }
 
     /// Parallel crawl: processes queue entries concurrently using a thread pool.
@@ -287,6 +317,7 @@ pub const Crawler = struct {
             t.* = try std.Thread.spawn(.{}, parallelWorker, .{ctx});
         }
         for (threads) |t| t.join();
+        if (!self.options.verbose) self.clearProgress();
     }
 
     fn fetchPage(self: *Crawler, url_str: []const u8, depth: u16, is_internal: bool) CrawlResult {

@@ -45,39 +45,97 @@ pub const FetchOptions = struct {
 /// Caller owns the returned Response and must call deinit().
 /// Reuses the provided client for connection pooling across requests.
 pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []const u8, options: FetchOptions) !Response {
-    const uri = std.Uri.parse(url_str) catch return error.InvalidUrl;
+    var redirect_count: u8 = 0;
+    var location_buf: [4096]u8 = undefined;
+    var current_url: []const u8 = url_str;
 
-    var req = client.request(.GET, uri, .{
-        .headers = .{ .accept_encoding = .{ .override = "identity" } },
-    }) catch return error.ConnectionFailed;
-    defer req.deinit();
+    while (true) {
+        const uri = std.Uri.parse(current_url) catch return error.ConnectionFailed;
 
-    req.sendBodiless() catch return error.ConnectionFailed;
+        // Use .unhandled so receiveHead never calls bodyReader(&.{}, ...) internally,
+        // which panics when redirect response body bytes are already buffered.
+        var req = client.request(.GET, uri, .{
+            .redirect_behavior = .unhandled,
+            .headers = .{ .accept_encoding = .{ .override = "identity" } },
+        }) catch return error.ConnectionFailed;
+        defer req.deinit();
 
-    var redirect_buf: [16 * 1024]u8 = undefined;
-    var response = req.receiveHead(&redirect_buf) catch return error.ConnectionFailed;
+        req.sendBodiless() catch return error.ConnectionFailed;
 
-    const status: u16 = @intFromEnum(response.head.status);
+        var redirect_buf: [16 * 1024]u8 = undefined;
+        var response = req.receiveHead(&redirect_buf) catch return error.ConnectionFailed;
 
-    // Extract content-type before reader invalidates strings
-    const content_type: ?[]u8 = if (response.head.content_type) |ct|
-        allocator.dupe(u8, ct) catch null
-    else
-        null;
-    errdefer if (content_type) |ct| allocator.free(ct);
+        const status: u16 = @intFromEnum(response.head.status);
 
-    // Read response body up to max_body_size to prevent OOM on large responses
-    var transfer_buf: [8192]u8 = undefined;
-    const reader = response.reader(&transfer_buf);
-    const body = reader.allocRemaining(allocator, std.io.Limit.limited(options.max_body_size)) catch
-        (allocator.dupe(u8, "") catch return error.ConnectionFailed);
+        // Follow redirects manually so we can drain the body with a real buffer.
+        if (status >= 300 and status < 400) {
+            redirect_count += 1;
+            if (redirect_count > options.max_redirects) return error.TooManyRedirects;
 
-    return Response{
-        .status = status,
-        .body = body,
-        .allocator = allocator,
-        .content_type = content_type,
-    };
+            const location = response.head.location orelse return error.ConnectionFailed;
+
+            // Resolve relative Location values against the current URL.
+            const new_url: []const u8 = blk: {
+                if (std.mem.startsWith(u8, location, "http://") or
+                    std.mem.startsWith(u8, location, "https://"))
+                {
+                    break :blk location;
+                }
+                // Root-relative or path-relative: reconstruct from current URI.
+                const scheme = if (uri.port orelse 0 == 443) "https" else uri.scheme;
+                const host = switch (uri.host orelse std.Uri.Component{ .raw = "" }) {
+                    .raw => |r| r,
+                    .percent_encoded => |r| r,
+                };
+                const port = uri.port;
+                const n = if (port) |p|
+                    std.fmt.bufPrint(&location_buf, "{s}://{s}:{d}{s}", .{ scheme, host, p, location }) catch return error.ConnectionFailed
+                else
+                    std.fmt.bufPrint(&location_buf, "{s}://{s}{s}", .{ scheme, host, location }) catch return error.ConnectionFailed;
+                break :blk n;
+            };
+
+            if (new_url.ptr != location_buf[0..].ptr) {
+                // absolute URL not yet in location_buf — copy it in
+                if (new_url.len > location_buf.len) return error.ConnectionFailed;
+                @memcpy(location_buf[0..new_url.len], new_url);
+                current_url = location_buf[0..new_url.len];
+            } else {
+                current_url = new_url;
+            }
+
+            // Transition reader state out of .received_head before deinit().
+            // If state stays .received_head, deinit() calls bodyReader(&.{}, ...)
+            // which returns reader.in for body-less redirects, then discardRemaining()
+            // triggers defaultDiscard's assert(seek == end) when bytes are buffered.
+            // Calling reader() here sets state to .body_none / .body_remaining_*,
+            // causing deinit() to take the `else => closing = true` path instead.
+            var drain_buf: [8192]u8 = undefined;
+            _ = response.reader(&drain_buf);
+
+            continue;
+        }
+
+        // Extract content-type before reader invalidates strings
+        const content_type: ?[]u8 = if (response.head.content_type) |ct|
+            allocator.dupe(u8, ct) catch null
+        else
+            null;
+        errdefer if (content_type) |ct| allocator.free(ct);
+
+        // Read response body up to max_body_size to prevent OOM on large responses
+        var transfer_buf: [8192]u8 = undefined;
+        const reader = response.reader(&transfer_buf);
+        const body = reader.allocRemaining(allocator, std.io.Limit.limited(options.max_body_size)) catch
+            (allocator.dupe(u8, "") catch return error.ConnectionFailed);
+
+        return Response{
+            .status = status,
+            .body = body,
+            .allocator = allocator,
+            .content_type = content_type,
+        };
+    }
 }
 
 /// Check if a URL is reachable by sending a GET request.
