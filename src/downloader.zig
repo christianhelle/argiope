@@ -76,6 +76,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     try w.print("Output: {s}, Depth: {d}\n\n", .{ opts.output_dir, opts.depth });
     try w.flush();
 
+    const crawl_start = std.time.milliTimestamp();
+
     var c = crawler_mod.Crawler.init(allocator, url, .{
         .max_depth = opts.depth,
         .timeout_ms = opts.timeout_ms,
@@ -85,6 +87,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     defer c.deinit();
 
     try c.crawl();
+
+    const crawl_elapsed_ms: u64 = @intCast(std.time.milliTimestamp() - crawl_start);
 
     var result = DownloadResult{
         .total_pages = c.results.items.len,
@@ -175,6 +179,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     try w.print("  Images downloaded: {d}\n", .{result.downloaded});
     try w.print("  Failed:           {d}\n", .{result.failed});
     try w.print("  Skipped:          {d}\n", .{result.skipped});
+    try w.print("\nTiming:\n", .{});
+    try w.print("  Total crawl time: {d}ms\n", .{crawl_elapsed_ms});
     try w.flush();
 
     return 0;

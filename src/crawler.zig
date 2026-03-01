@@ -9,6 +9,7 @@ pub const CrawlResult = struct {
     links_found: usize,
     is_internal: bool,
     error_msg: ?[]u8,
+    elapsed_ms: u64,
 
     pub fn deinit(self: *CrawlResult, allocator: std.mem.Allocator) void {
         if (self.url.len > 0) allocator.free(self.url);
@@ -91,7 +92,9 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
             .max_body_size = ctx.crawler.options.max_body_size,
         };
 
+        const t0 = std.time.milliTimestamp();
         var response = http_mod.fetch(&ctx.crawler.client, ctx.alloc, normalized, fetch_opts) catch |err| {
+            const elapsed: u64 = @intCast(std.time.milliTimestamp() - t0);
             const url_copy = ctx.alloc.dupe(u8, normalized) catch &[_]u8{};
             const err_copy = ctx.alloc.dupe(u8, @errorName(err)) catch null;
             ctx.mutex.lock();
@@ -101,11 +104,13 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
                 .links_found = 0,
                 .is_internal = is_internal,
                 .error_msg = err_copy,
+                .elapsed_ms = elapsed,
             }) catch {};
             ctx.mutex.unlock();
             continue;
         };
         defer response.deinit();
+        const elapsed_ms: u64 = @intCast(std.time.milliTimestamp() - t0);
 
         var links_found: usize = 0;
         var new_urls: std.ArrayListUnmanaged(QueueEntry) = .empty;
@@ -147,6 +152,7 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
             .links_found = links_found,
             .is_internal = is_internal,
             .error_msg = null,
+            .elapsed_ms = elapsed_ms,
         }) catch {};
         for (new_urls.items) |u| {
             if (ctx.crawler.visited.get(u.url) == null) {
@@ -290,13 +296,16 @@ pub const Crawler = struct {
             .max_body_size = self.options.max_body_size,
         };
 
+        const t0 = std.time.milliTimestamp();
         var response = http_mod.fetch(&self.client, self.allocator, url_str, fetch_opts) catch |err| {
+            const elapsed: u64 = @intCast(std.time.milliTimestamp() - t0);
             const url_copy = self.allocator.dupe(u8, url_str) catch return CrawlResult{
                 .url = &.{},
                 .status = 0,
                 .links_found = 0,
                 .is_internal = is_internal,
                 .error_msg = null,
+                .elapsed_ms = elapsed,
             };
             return CrawlResult{
                 .url = url_copy,
@@ -304,9 +313,11 @@ pub const Crawler = struct {
                 .links_found = 0,
                 .is_internal = is_internal,
                 .error_msg = self.allocator.dupe(u8, @errorName(err)) catch null,
+                .elapsed_ms = elapsed,
             };
         };
         defer response.deinit();
+        const elapsed_ms: u64 = @intCast(std.time.milliTimestamp() - t0);
 
         var links_found: usize = 0;
 
@@ -321,6 +332,7 @@ pub const Crawler = struct {
                     .links_found = 0,
                     .is_internal = is_internal,
                     .error_msg = null,
+                    .elapsed_ms = elapsed_ms,
                 };
                 return CrawlResult{
                     .url = url_copy,
@@ -328,6 +340,7 @@ pub const Crawler = struct {
                     .links_found = 0,
                     .is_internal = is_internal,
                     .error_msg = null,
+                    .elapsed_ms = elapsed_ms,
                 };
             };
             defer self.allocator.free(links);
@@ -370,6 +383,7 @@ pub const Crawler = struct {
             .links_found = links_found,
             .is_internal = is_internal,
             .error_msg = null,
+            .elapsed_ms = elapsed_ms,
         };
         return CrawlResult{
             .url = url_copy,
@@ -377,6 +391,7 @@ pub const Crawler = struct {
             .links_found = links_found,
             .is_internal = is_internal,
             .error_msg = null,
+            .elapsed_ms = elapsed_ms,
         };
     }
 
@@ -452,6 +467,7 @@ test "CrawlResult deinit" {
         .links_found = 5,
         .is_internal = true,
         .error_msg = try allocator.dupe(u8, "test error"),
+        .elapsed_ms = 42,
     };
     result.deinit(allocator);
 }

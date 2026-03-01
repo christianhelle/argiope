@@ -9,6 +9,9 @@ pub const CheckSummary = struct {
     error_count: usize,
     internal_count: usize,
     external_count: usize,
+    total_time_ms: u64,
+    min_time_ms: u64,
+    max_time_ms: u64,
 };
 
 /// Run the link checker: crawl the site and report broken links.
@@ -26,6 +29,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     });
     try w.flush();
 
+    const crawl_start = std.time.milliTimestamp();
+
     var c = crawler_mod.Crawler.init(allocator, url, .{
         .max_depth = opts.depth,
         .timeout_ms = opts.timeout_ms,
@@ -37,6 +42,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
 
     try c.crawl();
 
+    const crawl_elapsed_ms: u64 = @intCast(std.time.milliTimestamp() - crawl_start);
+
     // Print results
     const results = c.results.items;
     var summary = CheckSummary{
@@ -46,6 +53,9 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         .error_count = 0,
         .internal_count = 0,
         .external_count = 0,
+        .total_time_ms = 0,
+        .min_time_ms = std.math.maxInt(u64),
+        .max_time_ms = 0,
     };
 
     // Collect broken links for display
@@ -58,6 +68,10 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         } else {
             summary.external_count += 1;
         }
+
+        summary.total_time_ms += r.elapsed_ms;
+        if (r.elapsed_ms < summary.min_time_ms) summary.min_time_ms = r.elapsed_ms;
+        if (r.elapsed_ms > summary.max_time_ms) summary.max_time_ms = r.elapsed_ms;
 
         if (r.error_msg != null) {
             summary.error_count += 1;
@@ -72,27 +86,29 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
 
     // Print broken links table
     if (broken.items.len > 0) {
-        try w.print("{s}\n", .{"-" ** 78});
-        try w.print("{s:<8} {s:<10} {s}\n", .{ "Status", "Type", "URL" });
-        try w.print("{s}\n", .{"-" ** 78});
+        try w.print("{s}\n", .{"-" ** 88});
+        try w.print("{s:<8} {s:<10} {s:<10} {s}\n", .{ "Status", "Type", "Time(ms)", "URL" });
+        try w.print("{s}\n", .{"-" ** 88});
         try w.flush();
 
         for (broken.items) |idx| {
             const r = results[idx];
             const type_str: []const u8 = if (r.is_internal) "internal" else "external";
             if (r.error_msg) |msg| {
-                try w.print("{s:<8} {s:<10} {s}\n", .{ msg, type_str, r.url });
+                try w.print("{s:<8} {s:<10} {d:<10} {s}\n", .{ msg, type_str, r.elapsed_ms, r.url });
             } else {
-                try w.print("{d:<8} {s:<10} {s}\n", .{ r.status, type_str, r.url });
+                try w.print("{d:<8} {s:<10} {d:<10} {s}\n", .{ r.status, type_str, r.elapsed_ms, r.url });
             }
             try w.flush();
         }
 
-        try w.print("{s}\n", .{"-" ** 78});
+        try w.print("{s}\n", .{"-" ** 88});
         try w.flush();
     }
 
     // Print summary
+    const avg_time_ms = if (results.len > 0) summary.total_time_ms / results.len else 0;
+    const min_time = if (summary.min_time_ms == std.math.maxInt(u64)) 0 else summary.min_time_ms;
     try w.print("\nSummary:\n", .{});
     try w.print("  Total URLs checked: {d}\n", .{summary.total_urls});
     try w.print("  OK:                 {d}\n", .{summary.ok_count});
@@ -100,6 +116,11 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     try w.print("  Errors:             {d}\n", .{summary.error_count});
     try w.print("  Internal:           {d}\n", .{summary.internal_count});
     try w.print("  External:           {d}\n", .{summary.external_count});
+    try w.print("\nTiming:\n", .{});
+    try w.print("  Total crawl time:   {d}ms\n", .{crawl_elapsed_ms});
+    try w.print("  Avg response time:  {d}ms\n", .{avg_time_ms});
+    try w.print("  Min response time:  {d}ms\n", .{min_time});
+    try w.print("  Max response time:  {d}ms\n", .{summary.max_time_ms});
     try w.flush();
 
     // Return non-zero exit code if broken links found
@@ -116,9 +137,15 @@ test "CheckSummary defaults" {
         .error_count = 1,
         .internal_count = 7,
         .external_count = 3,
+        .total_time_ms = 500,
+        .min_time_ms = 20,
+        .max_time_ms = 150,
     };
     try std.testing.expect(s.total_urls == 10);
     try std.testing.expect(s.ok_count == 8);
     try std.testing.expect(s.broken_count == 1);
     try std.testing.expect(s.error_count == 1);
+    try std.testing.expect(s.total_time_ms == 500);
+    try std.testing.expect(s.min_time_ms == 20);
+    try std.testing.expect(s.max_time_ms == 150);
 }
