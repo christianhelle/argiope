@@ -51,7 +51,9 @@ pub fn fetch(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOp
 
     const uri = std.Uri.parse(url_str) catch return error.InvalidUrl;
 
-    var req = client.request(.GET, uri, .{}) catch return error.ConnectionFailed;
+    var req = client.request(.GET, uri, .{
+        .headers = .{ .accept_encoding = .{ .override = "identity" } },
+    }) catch return error.ConnectionFailed;
     defer req.deinit();
 
     req.sendBodiless() catch return error.ConnectionFailed;
