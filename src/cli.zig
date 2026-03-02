@@ -112,9 +112,9 @@ pub fn printHelp() !void {
     var buf: [4096]u8 = undefined;
     var fw = std.fs.File.stdout().writer(&buf);
     try fw.interface.print(
-        \\zigcrawler {s} — a web crawler for broken-link detection and image downloading
+        \\argiope {s} — a web crawler for broken-link detection and image downloading
         \\
-        \\Usage: zigcrawler <command> <url> [options]
+        \\Usage: argiope <command> <url> [options]
         \\
         \\Commands:
         \\  check <url>           Crawl a website and report broken links
@@ -131,9 +131,9 @@ pub fn printHelp() !void {
         \\  -v, --version         Show version
         \\
         \\Examples:
-        \\  zigcrawler check https://example.com
-        \\  zigcrawler check https://example.com --depth 5 --timeout 15
-        \\  zigcrawler download https://example.com/gallery -o ./images
+        \\  argiope check https://example.com
+        \\  argiope check https://example.com --depth 5 --timeout 15
+        \\  argiope download https://example.com/gallery -o ./images
         \\
     , .{version});
     try fw.interface.flush();
@@ -142,7 +142,7 @@ pub fn printHelp() !void {
 pub fn printVersion() !void {
     var buf: [256]u8 = undefined;
     var fw = std.fs.File.stdout().writer(&buf);
-    try fw.interface.print("zigcrawler {s}\n", .{version});
+    try fw.interface.print("argiope {s}\n", .{version});
     try fw.interface.flush();
 }
 
@@ -156,26 +156,26 @@ pub fn printError(msg: []const u8) void {
 // ── Tests ──────────────────────────────────────────────────────────────
 
 test "parse help flag" {
-    const args = &[_][]const u8{ "zigcrawler", "--help" };
+    const args = &[_][]const u8{ "argiope", "--help" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.command == .help);
 }
 
 test "parse version flag" {
-    const args = &[_][]const u8{ "zigcrawler", "-v" };
+    const args = &[_][]const u8{ "argiope", "-v" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.command == .version_cmd);
 }
 
 test "parse check command" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com" };
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.command == .check);
     try std.testing.expectEqualStrings("https://example.com", opts.url.?);
 }
 
 test "parse download command" {
-    const args = &[_][]const u8{ "zigcrawler", "download", "https://example.com", "-o", "./out" };
+    const args = &[_][]const u8{ "argiope", "download", "https://example.com", "-o", "./out" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.command == .download);
     try std.testing.expectEqualStrings("https://example.com", opts.url.?);
@@ -183,36 +183,36 @@ test "parse download command" {
 }
 
 test "parse depth option" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com", "--depth", "5" };
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--depth", "5" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.depth == 5);
 }
 
 test "parse timeout option" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com", "--timeout", "30" };
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--timeout", "30" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.timeout_ms == 30_000);
 }
 
 test "parse delay option" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com", "--delay", "500" };
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--delay", "500" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.delay_ms == 500);
 }
 
 test "no args shows help" {
-    const args = &[_][]const u8{"zigcrawler"};
+    const args = &[_][]const u8{"argiope"};
     const opts = try parseArgs(args);
     try std.testing.expect(opts.command == .help);
 }
 
 test "unknown command returns error" {
-    const args = &[_][]const u8{ "zigcrawler", "invalid" };
+    const args = &[_][]const u8{ "argiope", "invalid" };
     try std.testing.expectError(ParseError.UnknownCommand, parseArgs(args));
 }
 
 test "unknown option returns error" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "--invalid" };
+    const args = &[_][]const u8{ "argiope", "check", "--invalid" };
     try std.testing.expectError(ParseError.UnknownOption, parseArgs(args));
 }
 
@@ -226,14 +226,14 @@ test "defaults are correct" {
 }
 
 test "parse verbose flag" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com", "--verbose" };
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--verbose" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.verbose == true);
     try std.testing.expect(opts.command == .check);
 }
 
 test "parse parallel flag" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com", "--parallel" };
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--parallel" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.parallel == true);
     try std.testing.expect(opts.command == .check);
@@ -245,17 +245,17 @@ test "parallel defaults to false" {
 }
 
 test "help flag after command" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "--help" };
+    const args = &[_][]const u8{ "argiope", "check", "--help" };
     const opts = try parseArgs(args);
     try std.testing.expect(opts.command == .help);
 }
 
 test "missing depth value" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com", "--depth" };
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--depth" };
     try std.testing.expectError(ParseError.InvalidNumber, parseArgs(args));
 }
 
 test "invalid depth value" {
-    const args = &[_][]const u8{ "zigcrawler", "check", "https://example.com", "--depth", "abc" };
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--depth", "abc" };
     try std.testing.expectError(ParseError.InvalidNumber, parseArgs(args));
 }

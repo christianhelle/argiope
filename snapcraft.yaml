@@ -1,9 +1,9 @@
-name: zigcrawler
+name: argiope
 base: core22
 version: 0.1.0
 summary: A web crawler for broken-link detection and image downloading
 description: |
-  zigcrawler crawls websites to detect broken links and download images.
+  argiope crawls websites to detect broken links and download images.
   It supports configurable crawl depth, request timeouts, and rate limiting.
   Images can be saved to an organized directory structure for archiving websites.
 
@@ -11,8 +11,8 @@ grade: stable
 confinement: strict
 
 apps:
-  zigcrawler:
-    command: bin/zigcrawler
+  argiope:
+    command: bin/argiope
     plugs:
       - home
       - network
@@ -27,7 +27,7 @@ parts:
     organize:
       zig-x86_64-linux-0.16.0-dev.2682+02142a54d: zig
 
-  zigcrawler:
+  argiope:
     after: [zig]
     plugin: nil
     source: .
@@ -35,4 +35,4 @@ parts:
       export PATH="$SNAPCRAFT_STAGE/zig:$PATH"
       zig build -Doptimize=ReleaseFast
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin
-      cp zig-out/bin/zigcrawler $SNAPCRAFT_PART_INSTALL/bin/
+      cp zig-out/bin/argiope $SNAPCRAFT_PART_INSTALL/bin/

@@ -1,7 +1,7 @@
 .{
-    .name = .zigcrawler,
+    .name = .argiope,
     .version = "0.0.0",
-    .fingerprint = 0x614d62a63ad48451,
+    .fingerprint = 0xca17470d9040dfc5,
     .minimum_zig_version = "0.15.2",
     .dependencies = .{},
     .paths = .{

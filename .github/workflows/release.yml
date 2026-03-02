@@ -34,19 +34,19 @@ jobs:
         include:
           - target: x86_64-linux
             os: ubuntu-latest
-            artifact: zigcrawler-linux-x86_64
+            artifact: argiope-linux-x86_64
           - target: aarch64-linux
             os: ubuntu-latest
-            artifact: zigcrawler-linux-aarch64
+            artifact: argiope-linux-aarch64
           - target: x86_64-macos
             os: macos-latest
-            artifact: zigcrawler-macos-x86_64
+            artifact: argiope-macos-x86_64
           - target: aarch64-macos
             os: macos-latest
-            artifact: zigcrawler-macos-aarch64
+            artifact: argiope-macos-aarch64
           - target: x86_64-windows
             os: windows-latest
-            artifact: zigcrawler-windows-x86_64
+            artifact: argiope-windows-x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -60,11 +60,11 @@ jobs:
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
-        run: tar czf ${{ matrix.artifact }}.tar.gz -C zig-out/bin zigcrawler
+        run: tar czf ${{ matrix.artifact }}.tar.gz -C zig-out/bin argiope
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        run: Compress-Archive -Path zig-out\bin\zigcrawler.exe -DestinationPath ${{ matrix.artifact }}.zip
+        run: Compress-Archive -Path zig-out\bin\argiope.exe -DestinationPath ${{ matrix.artifact }}.zip
 
       - uses: actions/upload-artifact@v4
         with:

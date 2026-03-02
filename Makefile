@@ -2,7 +2,7 @@
 
 # Default target
 help:
-	@echo "zigcrawler Makefile targets:"
+	@echo "argiope Makefile targets:"
 	@echo "  make build      - Build release binary optimized for speed"
 	@echo "  make test       - Run all unit tests"
 	@echo "  make install    - Build and install to /usr/local/bin"
@@ -19,8 +19,8 @@ test:
 # Build and install binary
 install: build
 	@mkdir -p $(INSTALL_DIR)
-	cp zig-out/bin/zigcrawler $(INSTALL_DIR)/zigcrawler
-	@echo "Installed zigcrawler to $(INSTALL_DIR)/zigcrawler"
+	cp zig-out/bin/argiope $(INSTALL_DIR)/argiope
+	@echo "Installed argiope to $(INSTALL_DIR)/argiope"
 
 # Clean build artifacts
 clean:

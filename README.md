@@ -1,9 +1,9 @@
-# zigcrawler
+# argiope
 
 A web crawler for broken-link detection and image downloading, written in [Zig](https://ziglang.org/).
 
-[![CI](https://github.com/christianhelle/zigcrawler/actions/workflows/ci.yml/badge.svg)](https://github.com/christianhelle/zigcrawler/actions/workflows/ci.yml)
-[![Release](https://github.com/christianhelle/zigcrawler/actions/workflows/release.yml/badge.svg)](https://github.com/christianhelle/zigcrawler/actions/workflows/release.yml)
+[![CI](https://github.com/christianhelle/argiope/actions/workflows/ci.yml/badge.svg)](https://github.com/christianhelle/argiope/actions/workflows/ci.yml)
+[![Release](https://github.com/christianhelle/argiope/actions/workflows/release.yml/badge.svg)](https://github.com/christianhelle/argiope/actions/workflows/release.yml)
 
 ## Features
 
@@ -44,12 +44,12 @@ main.zig  →  cli.zig  →  crawler.zig  →  http.zig
 ### Snap
 
 ```sh
-sudo snap install zigcrawler
+sudo snap install argiope
 ```
 
 ### Download from GitHub Releases
 
-Pre-built binaries for Linux (x86_64, aarch64), macOS (x86_64, aarch64), and Windows (x86_64) are available on the [Releases](https://github.com/christianhelle/zigcrawler/releases) page.
+Pre-built binaries for Linux (x86_64, aarch64), macOS (x86_64, aarch64), and Windows (x86_64) are available on the [Releases](https://github.com/christianhelle/argiope/releases) page.
 
 ### Build from source
 
@@ -59,15 +59,15 @@ Requires [Zig 0.15.2+](https://ziglang.org/download/):
 zig build -Doptimize=ReleaseFast
 ```
 
-The binary is at `zig-out/bin/zigcrawler`.
+The binary is at `zig-out/bin/argiope`.
 
 ## Usage
 
 ### Check for broken links
 
 ```sh
-zigcrawler check https://example.com
-zigcrawler check https://example.com --depth 5 --timeout 15
+argiope check https://example.com
+argiope check https://example.com --depth 5 --timeout 15
 ```
 
 Output includes a table of broken links with status codes and a summary:
@@ -94,8 +94,8 @@ Summary:
 ### Download images
 
 ```sh
-zigcrawler download https://example.com/gallery -o ./images
-zigcrawler download https://manga-site.com/title --depth 2 -o ./manga
+argiope download https://example.com/gallery -o ./images
+argiope download https://manga-site.com/title --depth 2 -o ./manga
 ```
 
 Images are saved to `output_dir/page_N/image_N.ext` where the extension is derived from the source URL.
@@ -105,7 +105,7 @@ Images are saved to `output_dir/page_N/image_N.ext` where the extension is deriv
 For detailed progress output while crawling:
 
 ```sh
-zigcrawler check https://example.com --verbose
+argiope check https://example.com --verbose
 ```
 
 Each URL will be printed as it is checked, showing the crawling progress in real-time.
@@ -115,7 +115,7 @@ Each URL will be printed as it is checked, showing the crawling progress in real
 For faster crawling on sites with many links, enable parallel crawling:
 
 ```sh
-zigcrawler check https://example.com --parallel
+argiope check https://example.com --parallel
 ```
 
 This crawls multiple URLs concurrently for improved performance.
@@ -123,7 +123,7 @@ This crawls multiple URLs concurrently for improved performance.
 ### Options
 
 ```
-Usage: zigcrawler <command> [options]
+Usage: argiope <command> [options]
 
 Commands:
   check <url>       Crawl a website and report broken links
