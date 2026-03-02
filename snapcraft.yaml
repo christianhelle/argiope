@@ -5,7 +5,7 @@ summary: A web crawler for broken-link detection and image downloading
 description: |
   zigcrawler crawls websites to detect broken links and download images.
   It supports configurable crawl depth, request timeouts, and rate limiting.
-  Images can be saved to an organized directory structure for manga archival.
+  Images can be saved to an organized directory structure for archiving websites.
 
 grade: stable
 confinement: strict
@@ -20,12 +20,12 @@ apps:
 
 parts:
   zig:
-    plugin: nil
-    build-packages:
-      - curl
-      - xz-utils
-    override-build: |
-      snap install zig --classic --beta
+    plugin: dump
+    # Using a recent dev build because 0.15.2 stable URL was not found/available.
+    # Update this to a stable release URL when available.
+    source: https://ziglang.org/builds/zig-x86_64-linux-0.16.0-dev.2682+02142a54d.tar.xz
+    organize:
+      zig-x86_64-linux-0.16.0-dev.2682+02142a54d: zig
 
   zigcrawler:
     after: [zig]
@@ -36,5 +36,3 @@ parts:
       zig build -Doptimize=ReleaseFast
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin
       cp zig-out/bin/zigcrawler $SNAPCRAFT_PART_INSTALL/bin/
-    stage-packages:
-      - libc6
