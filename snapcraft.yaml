@@ -20,14 +20,14 @@ apps:
 
 parts:
   zig:
-    plugin: dump
-    # Using a recent dev build because 0.15.2 stable URL was not found/available.
-    # Update this to a stable release URL when available.
-    source: https://ziglang.org/builds/zig-x86_64-linux-0.16.0-dev.2682+02142a54d.tar.xz
-    organize:
-      zig-x86_64-linux-0.16.0-dev.2682+02142a54d: zig
+    plugin: nil
+    build-packages:
+      - curl
+      - xz-utils
+    override-build: |
+      snap install zig --classic --beta
 
-  argiope:
+  zigcrawler:
     after: [zig]
     plugin: nil
     source: .
