@@ -12,6 +12,9 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (target.result.os.tag == .windows) {
+        exe.addWin32ResourceFile(.{ .file = b.path("images/icon.rc") });
+    }
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
