@@ -17,28 +17,6 @@ A web crawler for broken-link detection and image downloading, written in [Zig](
 - Single static binary — no runtime needed
 - Cross-platform: Linux, macOS, Windows
 
-## Architecture
-
-```
-main.zig  →  cli.zig  →  crawler.zig  →  http.zig
-                              ↓              ↓
-                         html.zig       url.zig
-                              ↓
-                    link_checker.zig  (check mode)
-                    downloader.zig   (download mode)
-```
-
-| Module | Responsibility |
-|---|---|
-| `main.zig` | Entry point; `GeneralPurposeAllocator` with leak detection |
-| `cli.zig` | CLI argument parsing for `check` and `download` subcommands |
-| `url.zig` | URL parsing (wraps `std.Uri`), normalization, resolution, same-origin |
-| `http.zig` | HTTP client wrapper using `std.http.Client` |
-| `html.zig` | HTML scanner extracting `<a href>`, `<img src>`, `<link>`, `<script>`, `<iframe>`, `srcset` |
-| `crawler.zig` | BFS crawl engine with visited set, depth limiting, rate limiting |
-| `link_checker.zig` | Broken link reporter with tabular output |
-| `downloader.zig` | Image downloader with directory structure |
-
 ## Installation
 
 ### Snap
