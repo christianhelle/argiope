@@ -4,7 +4,7 @@ pub const version = "0.1.0";
 
 pub const Command = enum {
     check,
-    download,
+    images,
     help,
     version_cmd,
 };
@@ -18,6 +18,8 @@ pub const Options = struct {
     output_dir: []const u8,
     verbose: bool,
     parallel: bool,
+    chapters_from: ?f32,
+    chapters_to: ?f32,
 
     pub const defaults = Options{
         .command = .help,
@@ -28,6 +30,8 @@ pub const Options = struct {
         .output_dir = "./download",
         .verbose = false,
         .parallel = false,
+        .chapters_from = null,
+        .chapters_to = null,
     };
 };
 
@@ -57,8 +61,8 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
 
     if (std.mem.eql(u8, cmd_str, "check")) {
         opts.command = .check;
-    } else if (std.mem.eql(u8, cmd_str, "download")) {
-        opts.command = .download;
+    } else if (std.mem.eql(u8, cmd_str, "images")) {
+        opts.command = .images;
     } else {
         return ParseError.UnknownCommand;
     }
@@ -91,6 +95,16 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
             opts.verbose = true;
         } else if (std.mem.eql(u8, arg, "--parallel")) {
             opts.parallel = true;
+        } else if (std.mem.eql(u8, arg, "--chapters")) {
+            i += 1;
+            if (i >= args.len) return ParseError.InvalidNumber;
+            const range = args[i];
+            if (std.mem.indexOf(u8, range, "-")) |dash| {
+                opts.chapters_from = std.fmt.parseFloat(f32, range[0..dash]) catch return ParseError.InvalidNumber;
+                opts.chapters_to = std.fmt.parseFloat(f32, range[dash + 1 ..]) catch return ParseError.InvalidNumber;
+            } else {
+                return ParseError.InvalidNumber;
+            }
         } else if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
             i += 1;
             if (i >= args.len) return ParseError.UnknownOption;
@@ -118,13 +132,14 @@ pub fn printHelp() !void {
         \\
         \\Commands:
         \\  check <url>           Crawl a website and report broken links
-        \\  download <url>        Download images from a website
+        \\  images <url>          Download images from a website
         \\
         \\Options:
         \\  --depth N             Maximum crawl depth (default: 3)
         \\  --timeout N           Request timeout in seconds (default: 10)
         \\  --delay N             Delay between requests in ms (default: 100)
         \\  -o, --output DIR      Output directory for downloads (default: ./download)
+        \\  --chapters N-M        Chapter range to download, e.g. --chapters 1-10 (fanfox.net only)
         \\  --verbose             Print progress for each URL as it is crawled
         \\  --parallel            Crawl URLs in parallel for better performance
         \\  -h, --help            Show this help
@@ -133,7 +148,8 @@ pub fn printHelp() !void {
         \\Examples:
         \\  argiope check https://example.com
         \\  argiope check https://example.com --depth 5 --timeout 15
-        \\  argiope download https://example.com/gallery -o ./images
+        \\  argiope images https://example.com/gallery -o ./images
+        \\  argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
         \\
     , .{version});
     try fw.interface.flush();
@@ -174,10 +190,10 @@ test "parse check command" {
     try std.testing.expectEqualStrings("https://example.com", opts.url.?);
 }
 
-test "parse download command" {
-    const args = &[_][]const u8{ "argiope", "download", "https://example.com", "-o", "./out" };
+test "parse images command" {
+    const args = &[_][]const u8{ "argiope", "images", "https://example.com", "-o", "./out" };
     const opts = try parseArgs(args);
-    try std.testing.expect(opts.command == .download);
+    try std.testing.expect(opts.command == .images);
     try std.testing.expectEqualStrings("https://example.com", opts.url.?);
     try std.testing.expectEqualStrings("./out", opts.output_dir);
 }

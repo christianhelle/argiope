@@ -4,6 +4,7 @@ const http_mod = @import("http.zig");
 const html_mod = @import("html.zig");
 const url_mod = @import("url.zig");
 const cli_mod = @import("cli.zig");
+const mangafox_mod = @import("mangafox.zig");
 
 pub const DownloadResult = struct {
     total_pages: usize,
@@ -67,6 +68,11 @@ fn ensureDir(allocator: std.mem.Allocator, base_path: []const u8) !std.fs.Dir {
 /// Run the downloader: crawl the site, find images, and save them.
 pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     const url = opts.url orelse return 1;
+
+    // Delegate to the MangaFox-specific downloader for fanfox.net URLs
+    if (std.mem.indexOf(u8, url, "fanfox.net") != null) {
+        return mangafox_mod.run(allocator, opts);
+    }
 
     var buf: [4096]u8 = undefined;
     var fw = std.fs.File.stdout().writer(&buf);

@@ -16,7 +16,7 @@ pub fn main() !void {
             cli.ParseError.MissingUrl => "missing URL argument",
             cli.ParseError.InvalidNumber => "invalid numeric argument",
             cli.ParseError.UnknownOption => "unknown option",
-            cli.ParseError.UnknownCommand => "unknown command (use 'check' or 'download')",
+            cli.ParseError.UnknownCommand => "unknown command (use 'check' or 'images')",
         };
         cli.printError(msg);
         try cli.printHelp();
@@ -35,9 +35,9 @@ pub fn main() !void {
             const exit_code = try link_checker.run(allocator, opts);
             if (exit_code != 0) std.process.exit(exit_code);
         },
-        .download => {
+        .images => {
             if (opts.url == null) {
-                cli.printError("missing URL argument for 'download' command");
+                cli.printError("missing URL argument for 'images' command");
                 try cli.printHelp();
                 std.process.exit(1);
             }
@@ -55,4 +55,5 @@ test "imports compile" {
     _ = @import("crawler.zig");
     _ = @import("link_checker.zig");
     _ = @import("downloader.zig");
+    _ = @import("mangafox.zig");
 }

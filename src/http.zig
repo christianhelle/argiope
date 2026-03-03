@@ -39,6 +39,9 @@ pub const FetchOptions = struct {
     max_redirects: u8 = 5,
     timeout_ms: u32 = 10_000,
     max_body_size: usize = 10 * 1024 * 1024, // 10 MB
+    extra_headers: []const std.http.Header = &.{},
+    /// Override the User-Agent header. When null the Zig default is used.
+    user_agent: ?[]const u8 = null,
 };
 
 /// Fetch a URL via GET, following redirects. Returns response with body.
@@ -56,7 +59,11 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
         // which panics when redirect response body bytes are already buffered.
         var req = client.request(.GET, uri, .{
             .redirect_behavior = .unhandled,
-            .headers = .{ .accept_encoding = .{ .override = "identity" } },
+            .headers = .{
+                .accept_encoding = .{ .override = "identity" },
+                .user_agent = if (options.user_agent) |ua| .{ .override = ua } else .default,
+            },
+            .extra_headers = options.extra_headers,
         }) catch return error.ConnectionFailed;
         defer req.deinit();
 
