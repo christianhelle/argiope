@@ -4,7 +4,7 @@ pub const version = "0.1.0";
 
 pub const Command = enum {
     check,
-    download,
+    images,
     help,
     version_cmd,
 };
@@ -61,8 +61,8 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
 
     if (std.mem.eql(u8, cmd_str, "check")) {
         opts.command = .check;
-    } else if (std.mem.eql(u8, cmd_str, "download")) {
-        opts.command = .download;
+    } else if (std.mem.eql(u8, cmd_str, "images")) {
+        opts.command = .images;
     } else {
         return ParseError.UnknownCommand;
     }
@@ -132,7 +132,7 @@ pub fn printHelp() !void {
         \\
         \\Commands:
         \\  check <url>           Crawl a website and report broken links
-        \\  download <url>        Download images from a website
+        \\  images <url>          Download images from a website
         \\
         \\Options:
         \\  --depth N             Maximum crawl depth (default: 3)
@@ -148,8 +148,8 @@ pub fn printHelp() !void {
         \\Examples:
         \\  argiope check https://example.com
         \\  argiope check https://example.com --depth 5 --timeout 15
-        \\  argiope download https://example.com/gallery -o ./images
-        \\  argiope download https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
+        \\  argiope images https://example.com/gallery -o ./images
+        \\  argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
         \\
     , .{version});
     try fw.interface.flush();
@@ -190,10 +190,10 @@ test "parse check command" {
     try std.testing.expectEqualStrings("https://example.com", opts.url.?);
 }
 
-test "parse download command" {
-    const args = &[_][]const u8{ "argiope", "download", "https://example.com", "-o", "./out" };
+test "parse images command" {
+    const args = &[_][]const u8{ "argiope", "images", "https://example.com", "-o", "./out" };
     const opts = try parseArgs(args);
-    try std.testing.expect(opts.command == .download);
+    try std.testing.expect(opts.command == .images);
     try std.testing.expectEqualStrings("https://example.com", opts.url.?);
     try std.testing.expectEqualStrings("./out", opts.output_dir);
 }
