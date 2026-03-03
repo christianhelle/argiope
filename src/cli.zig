@@ -18,6 +18,8 @@ pub const Options = struct {
     output_dir: []const u8,
     verbose: bool,
     parallel: bool,
+    chapters_from: ?f32,
+    chapters_to: ?f32,
 
     pub const defaults = Options{
         .command = .help,
@@ -28,6 +30,8 @@ pub const Options = struct {
         .output_dir = "./download",
         .verbose = false,
         .parallel = false,
+        .chapters_from = null,
+        .chapters_to = null,
     };
 };
 
@@ -91,6 +95,16 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
             opts.verbose = true;
         } else if (std.mem.eql(u8, arg, "--parallel")) {
             opts.parallel = true;
+        } else if (std.mem.eql(u8, arg, "--chapters")) {
+            i += 1;
+            if (i >= args.len) return ParseError.InvalidNumber;
+            const range = args[i];
+            if (std.mem.indexOf(u8, range, "-")) |dash| {
+                opts.chapters_from = std.fmt.parseFloat(f32, range[0..dash]) catch return ParseError.InvalidNumber;
+                opts.chapters_to = std.fmt.parseFloat(f32, range[dash + 1 ..]) catch return ParseError.InvalidNumber;
+            } else {
+                return ParseError.InvalidNumber;
+            }
         } else if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
             i += 1;
             if (i >= args.len) return ParseError.UnknownOption;
@@ -125,6 +139,7 @@ pub fn printHelp() !void {
         \\  --timeout N           Request timeout in seconds (default: 10)
         \\  --delay N             Delay between requests in ms (default: 100)
         \\  -o, --output DIR      Output directory for downloads (default: ./download)
+        \\  --chapters N-M        Chapter range to download, e.g. --chapters 1-10 (fanfox.net only)
         \\  --verbose             Print progress for each URL as it is crawled
         \\  --parallel            Crawl URLs in parallel for better performance
         \\  -h, --help            Show this help
@@ -134,6 +149,7 @@ pub fn printHelp() !void {
         \\  argiope check https://example.com
         \\  argiope check https://example.com --depth 5 --timeout 15
         \\  argiope download https://example.com/gallery -o ./images
+        \\  argiope download https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
         \\
     , .{version});
     try fw.interface.flush();
