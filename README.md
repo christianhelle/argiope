@@ -9,6 +9,7 @@ A web crawler for broken-link detection and image downloading, written in [Zig](
 
 - Crawl websites and detect broken links (4xx/5xx/timeout)
 - Download images from web pages to organized directories
+- Download manga chapters from [MangaFox (fanfox.net)](https://fanfox.net) by title, with optional chapter range filtering
 - BFS traversal with configurable depth, timeouts, and rate limiting
 - Domain-restricted crawling with same-origin checks
 - Lightweight HTML scanner for link and image extraction
@@ -72,11 +73,23 @@ Summary:
 ### Download images
 
 ```sh
-argiope download https://example.com/gallery -o ./images
-argiope download https://manga-site.com/title --depth 2 -o ./manga
+argiope images https://example.com/gallery -o ./images
+argiope images https://manga-site.com/title --depth 2 -o ./manga
 ```
 
 Images are saved to `output_dir/page_N/image_N.ext` where the extension is derived from the source URL.
+
+### Download manga from MangaFox
+
+Pass a [fanfox.net](https://fanfox.net) manga URL to the `images` command. Chapter pages are downloaded automatically and saved as `[output_dir]/[manga-title]/[chapter]/[page].jpg`.
+
+```sh
+# Download all chapters
+argiope images https://fanfox.net/manga/naruto -o ./manga
+
+# Download a specific range of chapters
+argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
+```
 
 ### Verbose Mode
 
@@ -105,13 +118,14 @@ Usage: argiope <command> [options]
 
 Commands:
   check <url>       Crawl a website and report broken links
-  download <url>    Download images from a website
+  images <url>      Download images from a website
 
 Options:
   --depth N         Maximum crawl depth (default: 3)
   --timeout N       Request timeout in seconds (default: 10)
   --delay N         Delay between requests in ms (default: 100)
   -o, --output DIR  Output directory for downloads (default: ./download)
+  --chapters N-M    Chapter range to download, e.g. --chapters 1-10 (fanfox.net only)
   --verbose         Print progress for each URL as it is crawled
   --parallel        Crawl URLs in parallel for better performance
   -h, --help        Show help

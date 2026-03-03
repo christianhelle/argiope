@@ -7,6 +7,10 @@ description: |
   It supports configurable crawl depth, request timeouts, and rate limiting.
   Images can be saved to an organized directory structure for archiving websites.
 
+  MangaFox support: pass a fanfox.net manga URL to the 'images' command to
+  download chapter pages organized as [manga]/[chapter]/[page].jpg, with
+  optional chapter range filtering via --chapters N-M.
+
 grade: stable
 confinement: strict
 
