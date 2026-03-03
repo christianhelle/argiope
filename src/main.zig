@@ -55,4 +55,5 @@ test "imports compile" {
     _ = @import("crawler.zig");
     _ = @import("link_checker.zig");
     _ = @import("downloader.zig");
+    _ = @import("mangafox.zig");
 }
