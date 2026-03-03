@@ -69,8 +69,23 @@ fn ensureDir(allocator: std.mem.Allocator, base_path: []const u8) !std.fs.Dir {
 pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     const url = opts.url orelse return 1;
 
-    // Delegate to the MangaFox-specific downloader for fanfox.net URLs
-    if (std.mem.indexOf(u8, url, "fanfox.net") != null) {
+    // Delegate to the MangaFox-specific downloader for fanfox.net URLs (by host)
+    const is_fanfox = blk: {
+        const parsed = url_mod.Url.parse(url) catch break :blk false;
+        const host = parsed.host;
+        const base = "fanfox.net";
+        if (host.len == base.len) {
+            break :blk std.ascii.eqlIgnoreCase(host, base);
+        }
+        const sub_suffix = ".fanfox.net";
+        if (host.len > sub_suffix.len and
+            std.ascii.eqlIgnoreCase(host[host.len - sub_suffix.len ..], sub_suffix))
+        {
+            break :blk true;
+        }
+        break :blk false;
+    };
+    if (is_fanfox) {
         return mangafox_mod.run(allocator, opts);
     }
 

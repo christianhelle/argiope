@@ -42,7 +42,7 @@ pub fn parseChapterList(
 
     // Build the path prefix we're searching for: /manga/{slug}/
     var prefix_buf: [512]u8 = undefined;
-    const prefix = std.fmt.bufPrint(&prefix_buf, "/manga/{s}/", .{slug}) catch return error.OutOfMemory;
+    const prefix = std.fmt.bufPrint(&prefix_buf, "/manga/{s}/", .{slug}) catch |e| return e;
 
     var pos: usize = 0;
     while (pos < html.len) {
@@ -350,6 +350,15 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         return 1;
     };
 
+    // Validate slug to prevent path traversal attacks
+    if (std.mem.startsWith(u8, slug, ".") or
+        std.mem.indexOfScalar(u8, slug, '/') != null or
+        std.mem.indexOfScalar(u8, slug, '\\') != null)
+    {
+        printErr("Invalid manga slug in URL: {s}", .{slug});
+        return 1;
+    }
+
     var buf: [4096]u8 = undefined;
     var fw = std.fs.File.stdout().writer(&buf);
     const w = &fw.interface;
@@ -482,6 +491,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         defer out_dir.close();
 
         var page: usize = 1;
+        var saved_count: usize = 0;
         while (page <= page_count) : (page += 1) {
             // Call the chapterfun.ashx API to get the real CDN image URL
             const img_url = (fetchChapterfunImageUrl(
@@ -556,6 +566,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
             };
 
             total_downloaded += 1;
+            saved_count += 1;
 
             if (!opts.verbose) {
                 try w.print("  Saved {s}/{s}\n", .{ chapter_dir, filename });
@@ -568,7 +579,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
             }
         }
 
-        try w.print("  Chapter {s}: {d} page(s) saved.\n", .{ chapter.number, page - 1 });
+        try w.print("  Chapter {s}: {d} page(s) saved.\n", .{ chapter.number, saved_count });
         try w.flush();
 
         // Delay between chapters
