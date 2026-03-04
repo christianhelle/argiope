@@ -22,6 +22,17 @@ pub fn extractSlug(url_str: []const u8) ?[]const u8 {
     return rest[0..end];
 }
 
+/// Returns true if the slug is safe to use as a filesystem path component.
+/// Rejects empty strings, anything starting with '.' (covers ".", "..", ".hidden"),
+/// and anything containing '/' or '\' path separators.
+pub fn isValidSlug(slug: []const u8) bool {
+    if (slug.len == 0) return false;
+    if (std.mem.startsWith(u8, slug, ".")) return false;
+    if (std.mem.indexOfScalar(u8, slug, '/') != null) return false;
+    if (std.mem.indexOfScalar(u8, slug, '\\') != null) return false;
+    return true;
+}
+
 /// Parse the chapter list HTML for a given manga slug.
 /// Looks for anchor hrefs matching /manga/{slug}/[v.../]c{number}/
 /// Returns an owned slice; caller frees each item's fields and the slice itself.
@@ -42,7 +53,10 @@ pub fn parseChapterList(
 
     // Build the path prefix we're searching for: /manga/{slug}/
     var prefix_buf: [512]u8 = undefined;
-    const prefix = std.fmt.bufPrint(&prefix_buf, "/manga/{s}/", .{slug}) catch |e| return e;
+    const prefix = std.fmt.bufPrint(&prefix_buf, "/manga/{s}/", .{slug}) catch |e| {
+        if (e == error.NoSpaceLeft) return error.SlugTooLong;
+        return e;
+    };
 
     var pos: usize = 0;
     while (pos < html.len) {
@@ -351,10 +365,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     };
 
     // Validate slug to prevent path traversal attacks
-    if (std.mem.startsWith(u8, slug, ".") or
-        std.mem.indexOfScalar(u8, slug, '/') != null or
-        std.mem.indexOfScalar(u8, slug, '\\') != null)
-    {
+    if (!isValidSlug(slug)) {
         printErr("Invalid manga slug in URL: {s}", .{slug});
         return 1;
     }
@@ -878,6 +889,29 @@ test "extractSlug basic" {
 test "extractSlug no slug" {
     try std.testing.expect(extractSlug("https://fanfox.net/") == null);
     try std.testing.expect(extractSlug("https://example.com/page") == null);
+}
+
+test "isValidSlug valid" {
+    try std.testing.expect(isValidSlug("naruto"));
+    try std.testing.expect(isValidSlug("one_piece"));
+    try std.testing.expect(isValidSlug("dragon-ball-z"));
+    try std.testing.expect(isValidSlug("x"));
+}
+
+test "isValidSlug rejects dot-start" {
+    try std.testing.expect(!isValidSlug("."));
+    try std.testing.expect(!isValidSlug(".."));
+    try std.testing.expect(!isValidSlug(".hidden"));
+}
+
+test "isValidSlug rejects path separators" {
+    try std.testing.expect(!isValidSlug("a/b"));
+    try std.testing.expect(!isValidSlug("a\\b"));
+    try std.testing.expect(!isValidSlug("../escape"));
+}
+
+test "isValidSlug rejects empty" {
+    try std.testing.expect(!isValidSlug(""));
 }
 
 test "parseChapterList" {

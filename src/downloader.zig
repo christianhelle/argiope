@@ -65,27 +65,30 @@ fn ensureDir(allocator: std.mem.Allocator, base_path: []const u8) !std.fs.Dir {
     return cwd.openDir(base_path, .{}) catch return error.FileNotFound;
 }
 
+/// Returns true if `url`'s host is exactly "fanfox.net" or any subdomain of it (case-insensitive).
+/// Uses URL host parsing to avoid false positives from query parameters or path segments.
+pub fn isFanfoxHost(url: []const u8) bool {
+    const parsed = url_mod.Url.parse(url) catch return false;
+    const host = parsed.host;
+    const base = "fanfox.net";
+    if (host.len == base.len) {
+        return std.ascii.eqlIgnoreCase(host, base);
+    }
+    const sub_suffix = ".fanfox.net";
+    if (host.len > sub_suffix.len and
+        std.ascii.eqlIgnoreCase(host[host.len - sub_suffix.len ..], sub_suffix))
+    {
+        return true;
+    }
+    return false;
+}
+
 /// Run the downloader: crawl the site, find images, and save them.
 pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     const url = opts.url orelse return 1;
 
     // Delegate to the MangaFox-specific downloader for fanfox.net URLs (by host)
-    const is_fanfox = blk: {
-        const parsed = url_mod.Url.parse(url) catch break :blk false;
-        const host = parsed.host;
-        const base = "fanfox.net";
-        if (host.len == base.len) {
-            break :blk std.ascii.eqlIgnoreCase(host, base);
-        }
-        const sub_suffix = ".fanfox.net";
-        if (host.len > sub_suffix.len and
-            std.ascii.eqlIgnoreCase(host[host.len - sub_suffix.len ..], sub_suffix))
-        {
-            break :blk true;
-        }
-        break :blk false;
-    };
-    if (is_fanfox) {
+    if (isFanfoxHost(url)) {
         return mangafox_mod.run(allocator, opts);
     }
 
@@ -267,4 +270,25 @@ test "getExtension edge cases" {
     try std.testing.expect(getExtension("https://example.com/file.toolongext") == null);
     // Single char extension
     try std.testing.expectEqualStrings(".a", getExtension("https://example.com/file.a").?);
+}
+
+test "isFanfoxHost exact match" {
+    try std.testing.expect(isFanfoxHost("https://fanfox.net/manga/naruto/"));
+    try std.testing.expect(isFanfoxHost("https://FANFOX.NET/manga/naruto/"));
+    try std.testing.expect(isFanfoxHost("http://fanfox.net/"));
+}
+
+test "isFanfoxHost subdomain match" {
+    try std.testing.expect(isFanfoxHost("https://www.fanfox.net/manga/naruto/"));
+    try std.testing.expect(isFanfoxHost("https://WWW.FANFOX.NET/manga/naruto/"));
+    try std.testing.expect(isFanfoxHost("https://m.fanfox.net/"));
+}
+
+test "isFanfoxHost rejects false positives" {
+    // Host merely contains "fanfox.net" as a query param or path segment
+    try std.testing.expect(!isFanfoxHost("https://example.com/?ref=fanfox.net"));
+    try std.testing.expect(!isFanfoxHost("https://example.com/fanfox.net/page"));
+    // Different host with fanfox.net as a suffix but no dot separator
+    try std.testing.expect(!isFanfoxHost("https://notfanfox.net/page"));
+    try std.testing.expect(!isFanfoxHost("not-a-url"));
 }
