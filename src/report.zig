@@ -428,6 +428,10 @@ test "write html report to temp file" {
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "<!DOCTYPE html>") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/ok") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, ":root") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "prefers-color-scheme: dark") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "--bg") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "--text") != null);
 }
 
 test "include-positives includes ok links in text report" {
