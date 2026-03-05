@@ -52,7 +52,7 @@ argiope check https://example.com --depth 5 --timeout 15
 
 Output includes a list of broken links with status codes and a summary:
 
-```
+```text
 Link Check Report
 URL: https://example.com
 
@@ -151,7 +151,7 @@ argiope check https://example.com --report report.md --report-format markdown --
 
 ### Options
 
-```
+```text
 Usage: argiope <command> [options]
 
 Commands:
