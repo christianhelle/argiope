@@ -178,30 +178,48 @@ fn writeHtml(
         \\<meta name="viewport" content="width=device-width, initial-scale=1.0">
         \\<title>Link Check Report</title>
         \\<style>
+        \\  :root {{
+        \\    --bg: #f6f8fa; --surface: #fff; --border: #e1e4e8;
+        \\    --text: #1a1a1a; --muted: #666; --heading: #333;
+        \\    --broken: #d73a49; --broken-bg: #ffeef0;
+        \\    --ok: #28a745;    --ok-bg: #e6ffed;
+        \\    --link: #0366d6;  --link-bg: #f1f8ff;
+        \\    --time-bg: #f6f8fa;
+        \\  }}
+        \\  @media (prefers-color-scheme: dark) {{
+        \\    :root {{
+        \\      --bg: #0d1117; --surface: #161b22; --border: #30363d;
+        \\      --text: #e6edf3; --muted: #8b949e; --heading: #c9d1d9;
+        \\      --broken: #ff7b72; --broken-bg: #3d1f1f;
+        \\      --ok: #3fb950;    --ok-bg: #1a2e1f;
+        \\      --link: #58a6ff;  --link-bg: #1a2535;
+        \\      --time-bg: #21262d;
+        \\    }}
+        \\  }}
         \\  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-        \\  body {{ font-family: system-ui, sans-serif; background: #f6f8fa; color: #1a1a1a; padding: 40px 20px; }}
+        \\  body {{ font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 40px 20px; }}
         \\  .container {{ max-width: 860px; margin: 0 auto; }}
         \\  h1 {{ font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }}
-        \\  .subtitle {{ color: #666; font-size: 0.9rem; margin-bottom: 32px; word-break: break-all; }}
-        \\  h2 {{ font-size: 1.1rem; font-weight: 600; margin: 32px 0 12px; color: #333; }}
+        \\  .subtitle {{ color: var(--muted); font-size: 0.9rem; margin-bottom: 32px; word-break: break-all; }}
+        \\  h2 {{ font-size: 1.1rem; font-weight: 600; margin: 32px 0 12px; color: var(--heading); }}
         \\  .link-list {{ display: flex; flex-direction: column; gap: 10px; }}
-        \\  .link-item {{ background: #fff; border: 1px solid #e1e4e8; border-radius: 6px; padding: 12px 16px; }}
-        \\  .link-item.broken {{ border-left: 4px solid #d73a49; }}
-        \\  .link-item.ok {{ border-left: 4px solid #28a745; }}
+        \\  .link-item {{ background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; }}
+        \\  .link-item.broken {{ border-left: 4px solid var(--broken); }}
+        \\  .link-item.ok {{ border-left: 4px solid var(--ok); }}
         \\  .link-url {{ font-size: 0.9rem; word-break: break-all; margin-bottom: 6px; }}
         \\  .link-meta {{ display: flex; gap: 10px; flex-wrap: wrap; }}
         \\  .badge {{ font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; font-weight: 600; }}
-        \\  .badge-status-broken {{ background: #ffeef0; color: #d73a49; }}
-        \\  .badge-status-ok {{ background: #e6ffed; color: #28a745; }}
-        \\  .badge-type {{ background: #f1f8ff; color: #0366d6; }}
-        \\  .badge-time {{ background: #f6f8fa; color: #666; }}
-        \\  .none-found {{ color: #28a745; font-style: italic; font-size: 0.9rem; }}
+        \\  .badge-status-broken {{ background: var(--broken-bg); color: var(--broken); }}
+        \\  .badge-status-ok {{ background: var(--ok-bg); color: var(--ok); }}
+        \\  .badge-type {{ background: var(--link-bg); color: var(--link); }}
+        \\  .badge-time {{ background: var(--time-bg); color: var(--muted); }}
+        \\  .none-found {{ color: var(--ok); font-style: italic; font-size: 0.9rem; }}
         \\  .stats {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 8px; }}
-        \\  .stat {{ background: #fff; border: 1px solid #e1e4e8; border-radius: 6px; padding: 12px 16px; }}
-        \\  .stat-label {{ font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }}
+        \\  .stat {{ background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; }}
+        \\  .stat-label {{ font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }}
         \\  .stat-value {{ font-size: 1.4rem; font-weight: 700; margin-top: 4px; }}
-        \\  .stat-value.ok {{ color: #28a745; }}
-        \\  .stat-value.broken {{ color: #d73a49; }}
+        \\  .stat-value.ok {{ color: var(--ok); }}
+        \\  .stat-value.broken {{ color: var(--broken); }}
         \\</style>
         \\</head>
         \\<body>
