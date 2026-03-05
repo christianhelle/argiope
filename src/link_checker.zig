@@ -142,7 +142,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     }
 
     // Return non-zero exit code if broken links found or report write failed
-    return if (summary.broken_count > 0 or summary.error_count > 0 or report_write_failed) 1 else 0;
+    if (report_write_failed) return 2;
+    return if (summary.broken_count > 0 or summary.error_count > 0) 1 else 0;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
