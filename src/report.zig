@@ -98,7 +98,7 @@ fn writeText(
     try w.print("  Errors:    {d}\n", .{summary.error_count});
     try w.print("  Internal:  {d}\n", .{summary.internal_count});
     try w.print("  External:  {d}\n\n", .{summary.external_count});
-    try w.print("  Crawl time:  {d}ms\n", .{summary.total_time_ms});
+    try w.print("  Total response time:  {d}ms\n", .{summary.total_time_ms});
     try w.print("  Avg:         {d}ms\n", .{avg});
     try w.print("  Min:         {d}ms\n", .{min});
     try w.print("  Max:         {d}ms\n", .{summary.max_time_ms});
@@ -153,7 +153,7 @@ fn writeMarkdown(
     try w.print("- Internal: {d}\n", .{summary.internal_count});
     try w.print("- External: {d}\n\n", .{summary.external_count});
     try w.print("## Timing\n\n", .{});
-    try w.print("- Crawl time: {d}ms\n", .{summary.total_time_ms});
+    try w.print("- Total response time: {d}ms\n", .{summary.total_time_ms});
     try w.print("- Avg: {d}ms\n", .{avg});
     try w.print("- Min: {d}ms\n", .{min});
     try w.print("- Max: {d}ms\n", .{summary.max_time_ms});
@@ -275,7 +275,7 @@ fn writeHtml(
         \\</div>
         \\<h2>Timing</h2>
         \\<div class="stats">
-        \\  <div class="stat"><div class="stat-label">Crawl time</div><div class="stat-value">{d}ms</div></div>
+        \\  <div class="stat"><div class="stat-label">Total response time</div><div class="stat-value">{d}ms</div></div>
         \\  <div class="stat"><div class="stat-label">Avg</div><div class="stat-value">{d}ms</div></div>
         \\  <div class="stat"><div class="stat-label">Min</div><div class="stat-value">{d}ms</div></div>
         \\  <div class="stat"><div class="stat-label">Max</div><div class="stat-value">{d}ms</div></div>
