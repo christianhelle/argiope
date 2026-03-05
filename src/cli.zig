@@ -52,6 +52,8 @@ pub const ParseError = error{
     InvalidNumber,
     UnknownOption,
     UnknownCommand,
+    MissingValue,
+    InvalidValue,
 };
 
 /// Parse command-line arguments into Options.
@@ -119,15 +121,15 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
             }
         } else if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
             i += 1;
-            if (i >= args.len) return ParseError.UnknownOption;
+            if (i >= args.len) return ParseError.MissingValue;
             opts.output_dir = args[i];
         } else if (std.mem.eql(u8, arg, "--report")) {
             i += 1;
-            if (i >= args.len) return ParseError.UnknownOption;
+            if (i >= args.len) return ParseError.MissingValue;
             opts.report = args[i];
         } else if (std.mem.eql(u8, arg, "--report-format")) {
             i += 1;
-            if (i >= args.len) return ParseError.UnknownOption;
+            if (i >= args.len) return ParseError.MissingValue;
             const fmt = args[i];
             if (std.mem.eql(u8, fmt, "text")) {
                 opts.report_format = .text;
@@ -136,7 +138,7 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
             } else if (std.mem.eql(u8, fmt, "html")) {
                 opts.report_format = .html;
             } else {
-                return ParseError.UnknownOption;
+                return ParseError.InvalidValue;
             }
         } else if (std.mem.eql(u8, arg, "--include-positives")) {
             opts.include_positives = true;
@@ -344,5 +346,5 @@ test "report defaults" {
 
 test "invalid report-format returns error" {
     const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--report-format", "xml" };
-    try std.testing.expectError(ParseError.UnknownOption, parseArgs(args));
+    try std.testing.expectError(ParseError.InvalidValue, parseArgs(args));
 }
