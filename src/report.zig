@@ -179,6 +179,7 @@ fn writeHtml(
         \\<title>Link Check Report</title>
         \\<style>
         \\  :root {{
+        \\    color-scheme: light dark;
         \\    --bg: #f6f8fa; --surface: #fff; --border: #e1e4e8;
         \\    --text: #1a1a1a; --muted: #666; --heading: #333;
         \\    --broken: #d73a49; --broken-bg: #ffeef0;
