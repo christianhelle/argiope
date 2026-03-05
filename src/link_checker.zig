@@ -96,8 +96,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
                 } else {
                     try w.print("{d:<8} {s:<10} {d:<10} {s}\n", .{ r.status, type_str, r.elapsed_ms, r.url });
                 }
-                try w.flush();
             }
+            try w.flush();
 
             try w.print("{s}\n", .{"-" ** 88});
             try w.flush();
