@@ -53,30 +53,28 @@ argiope check https://example.com --depth 5 --timeout 15
 Output includes a list of broken links with status codes and a summary:
 
 ```text
-Link Check Report
-URL: https://example.com
+Crawling https://example.com (depth=3, timeout=10s)...
 
-BROKEN LINKS (2)
+----------------------------------------------------------------------------------------
+Status   Type       Time(ms)   URL
+----------------------------------------------------------------------------------------
+404      internal   45         https://example.com/missing-page
+timeout  external   10001      https://dead-link.example.org/page
+----------------------------------------------------------------------------------------
 
-  [404] https://example.com/missing-page
-        internal  •  45ms
+Summary:
+  Total URLs checked: 42
+  OK:                 40
+  Broken:             1
+  Errors:             1
+  Internal:           30
+  External:           12
 
-  [timeout] https://dead-link.example.org/page
-        external  •  10001ms
-
-SUMMARY
-
-  Checked:   42
-  OK:        40
-  Broken:    1
-  Errors:    1
-  Internal:  30
-  External:  12
-
-  Crawl time:  523ms
-  Avg:         12ms
-  Min:         5ms
-  Max:         10001ms
+Timing:
+  Total crawl time:   523ms
+  Avg response time:  12ms
+  Min response time:  5ms
+  Max response time:  10001ms
 ```
 
 ### Download images
