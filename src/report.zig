@@ -180,20 +180,34 @@ fn writeHtml(
         \\<style>
         \\  :root {{
         \\    color-scheme: light dark;
-        \\    --bg: #f6f8fa; --surface: #fff; --border: #e1e4e8;
-        \\    --text: #1a1a1a; --muted: #666; --heading: #333;
-        \\    --broken: #d73a49; --broken-bg: #ffeef0;
-        \\    --ok: #28a745;    --ok-bg: #e6ffed;
-        \\    --link: #0366d6;  --link-bg: #f1f8ff;
+        \\    --bg: #f6f8fa;
+        \\    --surface: #fff;
+        \\    --border: #e1e4e8;
+        \\    --text: #1a1a1a;
+        \\    --muted: #666;
+        \\    --heading: #333;
+        \\    --broken: #d73a49;
+        \\    --broken-bg: #ffeef0;
+        \\    --ok: #28a745;
+        \\    --ok-bg: #e6ffed;
+        \\    --link: #0366d6;
+        \\    --link-bg: #f1f8ff;
         \\    --time-bg: #f6f8fa;
         \\  }}
         \\  @media (prefers-color-scheme: dark) {{
         \\    :root {{
-        \\      --bg: #0d1117; --surface: #161b22; --border: #30363d;
-        \\      --text: #e6edf3; --muted: #8b949e; --heading: #c9d1d9;
-        \\      --broken: #ff7b72; --broken-bg: #3d1f1f;
-        \\      --ok: #3fb950;    --ok-bg: #1a2e1f;
-        \\      --link: #58a6ff;  --link-bg: #1a2535;
+        \\      --bg: #0d1117;
+        \\      --surface: #161b22;
+        \\      --border: #30363d;
+        \\      --text: #e6edf3;
+        \\      --muted: #8b949e;
+        \\      --heading: #c9d1d9;
+        \\      --broken: #ff7b72;
+        \\      --broken-bg: #3d1f1f;
+        \\      --ok: #3fb950;
+        \\      --ok-bg: #1a2e1f;
+        \\      --link: #58a6ff;
+        \\      --link-bg: #1a2535;
         \\      --time-bg: #21262d;
         \\    }}
         \\  }}
