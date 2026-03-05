@@ -6,3 +6,4 @@ parts
 prime
 stage/bin
 /manga
+/report.*
