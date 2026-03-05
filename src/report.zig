@@ -123,9 +123,9 @@ fn writeMarkdown(
             if (!is_broken) continue;
             const type_str: []const u8 = if (r.is_internal) "internal" else "external";
             if (r.error_msg) |msg| {
-                try w.print("- **[{s}]** {s}\n  `{s}` · {d}ms\n\n", .{ msg, r.url, type_str, r.elapsed_ms });
+                try w.print("- **[{s}]** <{s}>\n  `{s}` · {d}ms\n\n", .{ msg, r.url, type_str, r.elapsed_ms });
             } else {
-                try w.print("- **[{d}]** {s}\n  `{s}` · {d}ms\n\n", .{ r.status, r.url, type_str, r.elapsed_ms });
+                try w.print("- **[{d}]** <{s}>\n  `{s}` · {d}ms\n\n", .{ r.status, r.url, type_str, r.elapsed_ms });
             }
         }
     } else {
@@ -138,7 +138,7 @@ fn writeMarkdown(
             const is_broken = r.error_msg != null or r.status >= 400;
             if (is_broken) continue;
             const type_str: []const u8 = if (r.is_internal) "internal" else "external";
-            try w.print("- **[{d}]** {s}\n  `{s}` · {d}ms\n\n", .{ r.status, r.url, type_str, r.elapsed_ms });
+            try w.print("- **[{d}]** <{s}>\n  `{s}` · {d}ms\n\n", .{ r.status, r.url, type_str, r.elapsed_ms });
         }
     }
 
