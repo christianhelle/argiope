@@ -2,18 +2,9 @@ const std = @import("std");
 const crawler_mod = @import("crawler.zig");
 const cli_mod = @import("cli.zig");
 const report_mod = @import("report.zig");
+const summary_mod = @import("summary.zig");
 
-pub const CheckSummary = struct {
-    total_urls: usize,
-    ok_count: usize,
-    broken_count: usize,
-    error_count: usize,
-    internal_count: usize,
-    external_count: usize,
-    total_time_ms: u64,
-    min_time_ms: u64,
-    max_time_ms: u64,
-};
+pub const CheckSummary = summary_mod.CheckSummary;
 
 /// Run the link checker: crawl the site and report broken links.
 pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {

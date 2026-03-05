@@ -1,7 +1,7 @@
 const std = @import("std");
 const cli_mod = @import("cli.zig");
 const crawler_mod = @import("crawler.zig");
-const link_checker_mod = @import("link_checker.zig");
+const summary_mod = @import("summary.zig");
 
 /// Escape HTML special characters in a string.
 /// Caller owns the returned memory.
@@ -29,7 +29,7 @@ pub fn write(
     format: cli_mod.ReportFormat,
     url: []const u8,
     results: []const crawler_mod.CrawlResult,
-    summary: link_checker_mod.CheckSummary,
+    summary: summary_mod.CheckSummary,
     include_positives: bool,
 ) !void {
     const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
@@ -52,7 +52,7 @@ fn writeText(
     w: anytype,
     url: []const u8,
     results: []const crawler_mod.CrawlResult,
-    summary: link_checker_mod.CheckSummary,
+    summary: summary_mod.CheckSummary,
     include_positives: bool,
 ) !void {
     try w.print("Link Check Report\n", .{});
@@ -108,7 +108,7 @@ fn writeMarkdown(
     w: anytype,
     url: []const u8,
     results: []const crawler_mod.CrawlResult,
-    summary: link_checker_mod.CheckSummary,
+    summary: summary_mod.CheckSummary,
     include_positives: bool,
 ) !void {
     try w.print("# Link Check Report\n\n", .{});
@@ -164,7 +164,7 @@ fn writeHtml(
     w: anytype,
     url: []const u8,
     results: []const crawler_mod.CrawlResult,
-    summary: link_checker_mod.CheckSummary,
+    summary: summary_mod.CheckSummary,
     include_positives: bool,
 ) !void {
     const escaped_url = try escapeHtml(allocator, url);
@@ -308,7 +308,7 @@ test "write text report to temp file" {
         .{ .url = @constCast("https://example.com"), .status = 200, .links_found = 1, .is_internal = true, .error_msg = null, .elapsed_ms = 50 },
         .{ .url = @constCast("https://example.com/broken"), .status = 404, .links_found = 0, .is_internal = true, .error_msg = null, .elapsed_ms = 30 },
     };
-    const summary = link_checker_mod.CheckSummary{
+    const summary = summary_mod.CheckSummary{
         .total_urls = 2,
         .ok_count = 1,
         .broken_count = 1,
@@ -337,7 +337,7 @@ test "write markdown report to temp file" {
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com/404"), .status = 404, .links_found = 0, .is_internal = false, .error_msg = null, .elapsed_ms = 20 },
     };
-    const summary = link_checker_mod.CheckSummary{
+    const summary = summary_mod.CheckSummary{
         .total_urls = 1,
         .ok_count = 0,
         .broken_count = 1,
@@ -365,7 +365,7 @@ test "write html report to temp file" {
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com/ok"), .status = 200, .links_found = 0, .is_internal = true, .error_msg = null, .elapsed_ms = 10 },
     };
-    const summary = link_checker_mod.CheckSummary{
+    const summary = summary_mod.CheckSummary{
         .total_urls = 1,
         .ok_count = 1,
         .broken_count = 0,
@@ -393,7 +393,7 @@ test "include-positives includes ok links in text report" {
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com/ok"), .status = 200, .links_found = 0, .is_internal = true, .error_msg = null, .elapsed_ms = 10 },
     };
-    const summary = link_checker_mod.CheckSummary{
+    const summary = summary_mod.CheckSummary{
         .total_urls = 1,
         .ok_count = 1,
         .broken_count = 0,

@@ -57,4 +57,5 @@ test "imports compile" {
     _ = @import("downloader.zig");
     _ = @import("mangafox.zig");
     _ = @import("report.zig");
+    _ = @import("summary.zig");
 }
