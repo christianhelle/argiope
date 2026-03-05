@@ -24,6 +24,7 @@ pub const CrawlOptions = struct {
     max_redirects: u8 = 5,
     max_body_size: usize = 10 * 1024 * 1024,
     verbose: bool = false,
+    silent: bool = false,
     parallel: bool = false,
 };
 
@@ -110,7 +111,7 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
                 .elapsed_ms = elapsed,
             }) catch {};
             ctx.crawler.checked_count += 1;
-            if (!ctx.crawler.options.verbose) ctx.crawler.printProgress(ctx.crawler.queue.items.len);
+            if (!ctx.crawler.options.verbose and !ctx.crawler.options.silent) ctx.crawler.printProgress(ctx.crawler.queue.items.len);
             ctx.mutex.unlock();
             continue;
         };
@@ -160,7 +161,7 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
             .elapsed_ms = elapsed_ms,
         }) catch {};
         ctx.crawler.checked_count += 1;
-        if (!ctx.crawler.options.verbose) ctx.crawler.printProgress(ctx.crawler.queue.items.len);
+        if (!ctx.crawler.options.verbose and !ctx.crawler.options.silent) ctx.crawler.printProgress(ctx.crawler.queue.items.len);
         for (new_urls.items) |u| {
             if (ctx.crawler.visited.get(u.url) == null) {
                 ctx.crawler.queue.append(ctx.alloc, .{ .url = u.url, .depth = u.depth }) catch {
@@ -279,14 +280,14 @@ pub const Crawler = struct {
             self.checked_count += 1;
             try self.results.append(self.allocator, result);
 
-            if (!self.options.verbose) self.printProgress(self.queue.items.len);
+            if (!self.options.verbose and !self.options.silent) self.printProgress(self.queue.items.len);
 
             // Rate limiting
             if (self.options.delay_ms > 0) {
                 std.Thread.sleep(@as(u64, self.options.delay_ms) * std.time.ns_per_ms);
             }
         }
-        if (!self.options.verbose) self.clearProgress();
+        if (!self.options.verbose and !self.options.silent) self.clearProgress();
     }
 
     /// Parallel crawl: processes queue entries concurrently using a thread pool.
@@ -317,7 +318,7 @@ pub const Crawler = struct {
             t.* = try std.Thread.spawn(.{}, parallelWorker, .{ctx});
         }
         for (threads) |t| t.join();
-        if (!self.options.verbose) self.clearProgress();
+        if (!self.options.verbose and !self.options.silent) self.clearProgress();
     }
 
     fn fetchPage(self: *Crawler, url_str: []const u8, depth: u16, is_internal: bool) CrawlResult {
