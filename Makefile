@@ -27,4 +27,4 @@ clean:
 	rm -rf zig-out .zig-cache
 
 # Set default install directory (can be overridden: make install INSTALL_DIR=~/.local/bin)
-INSTALL_DIR ?= /usr/local/bin
+INSTALL_DIR ?= ~/.local/bin
