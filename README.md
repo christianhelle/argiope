@@ -8,6 +8,7 @@ A web crawler for broken-link detection and image downloading, written in [Zig](
 ## Features
 
 - Crawl websites and detect broken links (4xx/5xx/timeout)
+- Generate reports in text, Markdown, or HTML format
 - Download images from web pages to organized directories
 - Download manga chapters from [MangaFox (fanfox.net)](https://fanfox.net) by title, with optional chapter range filtering
 - BFS traversal with configurable depth, timeouts, and rate limiting
@@ -49,25 +50,33 @@ argiope check https://example.com
 argiope check https://example.com --depth 5 --timeout 15
 ```
 
-Output includes a table of broken links with status codes and a summary:
+Output includes a list of broken links with status codes and a summary:
 
 ```
-Crawling https://example.com (depth=3, timeout=10s)...
+Link Check Report
+URL: https://example.com
 
-------------------------------------------------------------------------------
-Status   Type       URL
-------------------------------------------------------------------------------
-404      internal   https://example.com/missing-page
-timeout  external   https://dead-link.example.org/page
-------------------------------------------------------------------------------
+BROKEN LINKS (2)
 
-Summary:
-  Total URLs checked: 42
-  OK:                 40
-  Broken:             1
-  Errors:             1
-  Internal:           30
-  External:           12
+  [404] https://example.com/missing-page
+        internal  •  45ms
+
+  [timeout] https://dead-link.example.org/page
+        external  •  10001ms
+
+SUMMARY
+
+  Checked:   42
+  OK:        40
+  Broken:    1
+  Errors:    1
+  Internal:  30
+  External:  12
+
+  Crawl time:  523ms
+  Avg:         12ms
+  Min:         5ms
+  Max:         10001ms
 ```
 
 ### Download images
@@ -111,25 +120,57 @@ argiope check https://example.com --parallel
 
 This crawls multiple URLs concurrently for improved performance.
 
+### Generate reports
+
+Write the results to a file instead of printing to the terminal. In report mode all console output is suppressed, making it suitable for CI pipelines and LLM-based workflows.
+
+```sh
+# Text report (default)
+argiope check https://example.com --report report.txt
+
+# Markdown report
+argiope check https://example.com --report report.md --report-format markdown
+
+# HTML report (self-contained, no external dependencies)
+argiope check https://example.com --report report.html --report-format html
+```
+
+By default only broken links appear in the report. Add `--include-positives` to include all successfully resolved links as well:
+
+```sh
+argiope check https://example.com --report report.md --report-format markdown --include-positives
+```
+
+#### Report formats
+
+| Format | Description |
+|--------|-------------|
+| `text` | Plain-text list with indented type/timing detail per entry (default) |
+| `markdown` | GitHub-Flavored Markdown bullet list — suitable for PR comments or wikis |
+| `html` | Self-contained HTML file with inline CSS, card layout, and pill badges |
+
 ### Options
 
 ```
 Usage: argiope <command> [options]
 
 Commands:
-  check <url>       Crawl a website and report broken links
-  images <url>      Download images from a website
+  check <url>           Crawl a website and report broken links
+  images <url>          Download images from a website
 
 Options:
-  --depth N         Maximum crawl depth (default: 3)
-  --timeout N       Request timeout in seconds (default: 10)
-  --delay N         Delay between requests in ms (default: 100)
-  -o, --output DIR  Output directory for downloads (default: ./download)
-  --chapters N-M    Chapter range to download, e.g. --chapters 1-10 (fanfox.net only)
-  --verbose         Print progress for each URL as it is crawled
-  --parallel        Crawl URLs in parallel for better performance
-  -h, --help        Show help
-  -v, --version     Show version
+  --depth N             Maximum crawl depth (default: 3)
+  --timeout N           Request timeout in seconds (default: 10)
+  --delay N             Delay between requests in ms (default: 100)
+  -o, --output DIR      Output directory for downloads (default: ./download)
+  --chapters N-M        Chapter range to download, e.g. --chapters 1-10 (fanfox.net only)
+  --verbose             Print progress for each URL as it is crawled
+  --parallel            Crawl URLs in parallel for better performance
+  --report <file>       Write a report to <file>
+  --report-format <fmt> Report format: text (default), markdown, html
+  --include-positives   Include successful links in the report
+  -h, --help            Show help
+  -v, --version         Show version
 ```
 
 ## Development
