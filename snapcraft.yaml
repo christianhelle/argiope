@@ -31,7 +31,7 @@ parts:
     override-build: |
       snap install zig --classic --beta
 
-  zigcrawler:
+  argiope:
     after: [zig]
     plugin: nil
     source: .
