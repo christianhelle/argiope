@@ -104,7 +104,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         }
 
         // Print summary
-        const avg_time_ms = if (results.len > 0) summary.total_time_ms / results.len else 0;
+        const avg_time_ms = if (results.len > 0) summary.total_time_ms / @as(u64, results.len) else 0;
         const min_time = if (summary.min_time_ms == std.math.maxInt(u64)) 0 else summary.min_time_ms;
         try w.print("\nSummary:\n", .{});
         try w.print("  Total URLs checked: {d}\n", .{summary.total_urls});

@@ -88,7 +88,7 @@ fn writeText(
         }
     }
 
-    const avg = if (summary.total_urls > 0) summary.total_time_ms / summary.total_urls else 0;
+    const avg = if (summary.total_urls > 0) summary.total_time_ms / @as(u64, summary.total_urls) else 0;
     const min = if (summary.min_time_ms == std.math.maxInt(u64)) 0 else summary.min_time_ms;
 
     try w.print("SUMMARY\n\n", .{});
@@ -142,7 +142,7 @@ fn writeMarkdown(
         }
     }
 
-    const avg = if (summary.total_urls > 0) summary.total_time_ms / summary.total_urls else 0;
+    const avg = if (summary.total_urls > 0) summary.total_time_ms / @as(u64, summary.total_urls) else 0;
     const min = if (summary.min_time_ms == std.math.maxInt(u64)) 0 else summary.min_time_ms;
 
     try w.print("## Summary\n\n", .{});
@@ -260,7 +260,7 @@ fn writeHtml(
         try w.print("</div>\n", .{});
     }
 
-    const avg = if (summary.total_urls > 0) summary.total_time_ms / summary.total_urls else 0;
+    const avg = if (summary.total_urls > 0) summary.total_time_ms / @as(u64, summary.total_urls) else 0;
     const min = if (summary.min_time_ms == std.math.maxInt(u64)) 0 else summary.min_time_ms;
 
     try w.print(
