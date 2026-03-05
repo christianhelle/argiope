@@ -3,6 +3,26 @@ const cli_mod = @import("cli.zig");
 const crawler_mod = @import("crawler.zig");
 const link_checker_mod = @import("link_checker.zig");
 
+/// Escape HTML special characters in a string.
+/// Caller owns the returned memory.
+fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+    var list: std.ArrayListUnmanaged(u8) = .empty;
+    defer list.deinit(allocator);
+
+    for (text) |char| {
+        switch (char) {
+            '&' => try list.appendSlice(allocator, "&amp;"),
+            '<' => try list.appendSlice(allocator, "&lt;"),
+            '>' => try list.appendSlice(allocator, "&gt;"),
+            '"' => try list.appendSlice(allocator, "&quot;"),
+            '\'' => try list.appendSlice(allocator, "&#39;"),
+            else => try list.append(allocator, char),
+        }
+    }
+
+    return list.toOwnedSlice(allocator);
+}
+
 pub fn write(
     allocator: std.mem.Allocator,
     path: []const u8,
@@ -147,7 +167,8 @@ fn writeHtml(
     summary: link_checker_mod.CheckSummary,
     include_positives: bool,
 ) !void {
-    _ = allocator;
+    const escaped_url = try escapeHtml(allocator, url);
+    defer allocator.free(escaped_url);
 
     try w.print(
         \\<!DOCTYPE html>
@@ -188,7 +209,7 @@ fn writeHtml(
         \\<h1>Link Check Report</h1>
         \\<p class="subtitle">{s}</p>
         \\
-    , .{url});
+    , .{escaped_url});
 
     const has_broken = summary.broken_count > 0 or summary.error_count > 0;
 
@@ -199,11 +220,15 @@ fn writeHtml(
             const is_broken = r.error_msg != null or r.status >= 400;
             if (!is_broken) continue;
             const type_str: []const u8 = if (r.is_internal) "internal" else "external";
+            const escaped_r_url = try escapeHtml(allocator, r.url);
+            defer allocator.free(escaped_r_url);
             try w.print("<div class=\"link-item broken\">\n", .{});
-            try w.print("  <div class=\"link-url\">{s}</div>\n", .{r.url});
+            try w.print("  <div class=\"link-url\">{s}</div>\n", .{escaped_r_url});
             try w.print("  <div class=\"link-meta\">\n", .{});
             if (r.error_msg) |msg| {
-                try w.print("    <span class=\"badge badge-status-broken\">{s}</span>\n", .{msg});
+                const escaped_msg = try escapeHtml(allocator, msg);
+                defer allocator.free(escaped_msg);
+                try w.print("    <span class=\"badge badge-status-broken\">{s}</span>\n", .{escaped_msg});
             } else {
                 try w.print("    <span class=\"badge badge-status-broken\">{d}</span>\n", .{r.status});
             }
@@ -222,8 +247,10 @@ fn writeHtml(
             const is_broken = r.error_msg != null or r.status >= 400;
             if (is_broken) continue;
             const type_str: []const u8 = if (r.is_internal) "internal" else "external";
+            const escaped_r_url = try escapeHtml(allocator, r.url);
+            defer allocator.free(escaped_r_url);
             try w.print("<div class=\"link-item ok\">\n", .{});
-            try w.print("  <div class=\"link-url\">{s}</div>\n", .{r.url});
+            try w.print("  <div class=\"link-url\">{s}</div>\n", .{escaped_r_url});
             try w.print("  <div class=\"link-meta\">\n", .{});
             try w.print("    <span class=\"badge badge-status-ok\">{d}</span>\n", .{r.status});
             try w.print("    <span class=\"badge badge-type\">{s}</span>\n", .{type_str});

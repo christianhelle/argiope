@@ -131,6 +131,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     }
 
     // Write report file if requested
+    var report_write_failed = false;
     if (opts.report) |report_path| {
         report_mod.write(
             allocator,
@@ -145,11 +146,12 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
             var efw = std.fs.File.stderr().writer(&ebuf);
             efw.interface.print("error: failed to write report to '{s}': {}\n", .{ report_path, err }) catch {};
             efw.interface.flush() catch {};
+            report_write_failed = true;
         };
     }
 
-    // Return non-zero exit code if broken links found
-    return if (summary.broken_count > 0 or summary.error_count > 0) 1 else 0;
+    // Return non-zero exit code if broken links found or report write failed
+    return if (summary.broken_count > 0 or summary.error_count > 0 or report_write_failed) 1 else 0;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
