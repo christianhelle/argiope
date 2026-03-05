@@ -2,6 +2,12 @@ const std = @import("std");
 
 pub const version = "0.1.0";
 
+pub const ReportFormat = enum {
+    text,
+    markdown,
+    html,
+};
+
 pub const Command = enum {
     check,
     images,
@@ -20,6 +26,9 @@ pub const Options = struct {
     parallel: bool,
     chapters_from: ?f32,
     chapters_to: ?f32,
+    report: ?[]const u8,
+    report_format: ReportFormat,
+    include_positives: bool,
 
     pub const defaults = Options{
         .command = .help,
@@ -32,6 +41,9 @@ pub const Options = struct {
         .parallel = false,
         .chapters_from = null,
         .chapters_to = null,
+        .report = null,
+        .report_format = .text,
+        .include_positives = false,
     };
 };
 
@@ -109,6 +121,25 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
             i += 1;
             if (i >= args.len) return ParseError.UnknownOption;
             opts.output_dir = args[i];
+        } else if (std.mem.eql(u8, arg, "--report")) {
+            i += 1;
+            if (i >= args.len) return ParseError.UnknownOption;
+            opts.report = args[i];
+        } else if (std.mem.eql(u8, arg, "--report-format")) {
+            i += 1;
+            if (i >= args.len) return ParseError.UnknownOption;
+            const fmt = args[i];
+            if (std.mem.eql(u8, fmt, "text")) {
+                opts.report_format = .text;
+            } else if (std.mem.eql(u8, fmt, "markdown")) {
+                opts.report_format = .markdown;
+            } else if (std.mem.eql(u8, fmt, "html")) {
+                opts.report_format = .html;
+            } else {
+                return ParseError.UnknownOption;
+            }
+        } else if (std.mem.eql(u8, arg, "--include-positives")) {
+            opts.include_positives = true;
         } else if (std.mem.startsWith(u8, arg, "-")) {
             return ParseError.UnknownOption;
         } else {
@@ -142,6 +173,9 @@ pub fn printHelp() !void {
         \\  --chapters N-M        Chapter range to download, e.g. --chapters 1-10 (fanfox.net only)
         \\  --verbose             Print progress for each URL as it is crawled
         \\  --parallel            Crawl URLs in parallel for better performance
+        \\  --report <file>       Write a report to <file>
+        \\  --report-format <fmt> Report format: text (default), markdown, html
+        \\  --include-positives   Include successful links in the report
         \\  -h, --help            Show this help
         \\  -v, --version         Show version
         \\
@@ -274,4 +308,41 @@ test "missing depth value" {
 test "invalid depth value" {
     const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--depth", "abc" };
     try std.testing.expectError(ParseError.InvalidNumber, parseArgs(args));
+}
+
+test "parse report flag" {
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--report", "out.txt" };
+    const opts = try parseArgs(args);
+    try std.testing.expectEqualStrings("out.txt", opts.report.?);
+    try std.testing.expect(opts.report_format == .text);
+}
+
+test "parse report-format markdown" {
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--report", "out.md", "--report-format", "markdown" };
+    const opts = try parseArgs(args);
+    try std.testing.expect(opts.report_format == .markdown);
+}
+
+test "parse report-format html" {
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--report", "out.html", "--report-format", "html" };
+    const opts = try parseArgs(args);
+    try std.testing.expect(opts.report_format == .html);
+}
+
+test "parse include-positives flag" {
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--include-positives" };
+    const opts = try parseArgs(args);
+    try std.testing.expect(opts.include_positives == true);
+}
+
+test "report defaults" {
+    const d = Options.defaults;
+    try std.testing.expect(d.report == null);
+    try std.testing.expect(d.report_format == .text);
+    try std.testing.expect(d.include_positives == false);
+}
+
+test "invalid report-format returns error" {
+    const args = &[_][]const u8{ "argiope", "check", "https://example.com", "--report-format", "xml" };
+    try std.testing.expectError(ParseError.UnknownOption, parseArgs(args));
 }
