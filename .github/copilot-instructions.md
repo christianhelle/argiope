@@ -34,8 +34,9 @@ main.zig  →  cli.zig  →  crawler.zig  →  http.zig
 | `http.zig`         | HTTP client wrapper using `std.http.Client` with `request/sendBodiless/receiveHead/reader`              |
 | `html.zig`         | HTML scanner: extracts `<a href>`, `<img src>`, `<link href>`, `<script src>`, `<iframe src>`, `srcset` |
 | `crawler.zig`      | BFS crawl engine: visited `StringHashMap`, depth limiting, domain restriction, rate limiting            |
-| `link_checker.zig` | Broken link reporter: collects URLs, checks status, outputs tabular report                              |
-| `downloader.zig`   | Image downloader: saves images to `output_dir/page_N/image_N.ext` structure                             |
+| `link_checker.zig` | Broken link reporter: collects URLs, checks status, writes console output or delegates to report.zig |
+| `report.zig`       | Report generator: writes text, Markdown, or HTML reports from crawl results                          |
+| `downloader.zig`   | Image downloader: saves images to `output_dir/page_N/image_N.ext` structure                          |
 
 ## Zig 0.15 API Notes
 
@@ -65,11 +66,9 @@ The visited set uses `StringHashMapUnmanaged` with owned key strings, freed on `
 
 ## Source Control and Documentation
 
-**Keep README in sync:** Every feature addition, change, or fix must update the README to reflect the current state of the application. Update usage examples, architecture diagrams, feature lists, or options as needed. The README is the source of truth for users.
+**Keep README in sync:** After every feature addition, change, or bug fix, update `README.md` to reflect the current state of the application. This must be done automatically — do not wait to be asked. Update usage examples, the options reference, feature lists, and architecture notes as needed. The README is the source of truth for users.
 
-**Commits:**
-
-- Make commits in small logical chunks with clear one-liner descriptions for a detailed progress history.
+**Commits:** Make commits in small logical chunks automatically — do not wait to be asked.
 - Use brief commit messages (one line only).
 - Always commit as the user (the actual developer), never create commits under fictional identities like "Copilot Agent" or similar.
 - **Never commit directly to the main branch.** If you detect that the current branch is `main`, create a feature branch (e.g., `feature/your-feature-name`) before making any commits.
