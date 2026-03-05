@@ -2,18 +2,9 @@ const std = @import("std");
 const crawler_mod = @import("crawler.zig");
 const cli_mod = @import("cli.zig");
 const report_mod = @import("report.zig");
+const summary_mod = @import("summary.zig");
 
-pub const CheckSummary = struct {
-    total_urls: usize,
-    ok_count: usize,
-    broken_count: usize,
-    error_count: usize,
-    internal_count: usize,
-    external_count: usize,
-    total_time_ms: u64,
-    min_time_ms: u64,
-    max_time_ms: u64,
-};
+pub const CheckSummary = summary_mod.CheckSummary;
 
 /// Run the link checker: crawl the site and report broken links.
 pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
@@ -41,6 +32,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         .timeout_ms = opts.timeout_ms,
         .delay_ms = opts.delay_ms,
         .verbose = opts.verbose and !silent,
+        .silent = silent,
         .parallel = opts.parallel,
     });
     defer c.deinit();
@@ -105,15 +97,15 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
                 } else {
                     try w.print("{d:<8} {s:<10} {d:<10} {s}\n", .{ r.status, type_str, r.elapsed_ms, r.url });
                 }
-                try w.flush();
             }
+            try w.flush();
 
             try w.print("{s}\n", .{"-" ** 88});
             try w.flush();
         }
 
         // Print summary
-        const avg_time_ms = if (results.len > 0) summary.total_time_ms / results.len else 0;
+        const avg_time_ms = if (results.len > 0) summary.total_time_ms / @as(u64, results.len) else 0;
         const min_time = if (summary.min_time_ms == std.math.maxInt(u64)) 0 else summary.min_time_ms;
         try w.print("\nSummary:\n", .{});
         try w.print("  Total URLs checked: {d}\n", .{summary.total_urls});
@@ -151,7 +143,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     }
 
     // Return non-zero exit code if broken links found or report write failed
-    return if (summary.broken_count > 0 or summary.error_count > 0 or report_write_failed) 1 else 0;
+    if (report_write_failed) return 2;
+    return if (summary.broken_count > 0 or summary.error_count > 0) 1 else 0;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────

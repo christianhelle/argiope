@@ -17,6 +17,8 @@ pub fn main() !void {
             cli.ParseError.InvalidNumber => "invalid numeric argument",
             cli.ParseError.UnknownOption => "unknown option",
             cli.ParseError.UnknownCommand => "unknown command (use 'check' or 'images')",
+            cli.ParseError.MissingValue => "missing value for option",
+            cli.ParseError.InvalidValue => "invalid value for --report-format (use: text, markdown, html)",
         };
         cli.printError(msg);
         try cli.printHelp();
@@ -57,4 +59,5 @@ test "imports compile" {
     _ = @import("downloader.zig");
     _ = @import("mangafox.zig");
     _ = @import("report.zig");
+    _ = @import("summary.zig");
 }

@@ -1,7 +1,7 @@
 const std = @import("std");
 const cli_mod = @import("cli.zig");
 const crawler_mod = @import("crawler.zig");
-const link_checker_mod = @import("link_checker.zig");
+const summary_mod = @import("summary.zig");
 
 /// Escape HTML special characters in a string.
 /// Caller owns the returned memory.
@@ -29,7 +29,7 @@ pub fn write(
     format: cli_mod.ReportFormat,
     url: []const u8,
     results: []const crawler_mod.CrawlResult,
-    summary: link_checker_mod.CheckSummary,
+    summary: summary_mod.CheckSummary,
     include_positives: bool,
 ) !void {
     const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
@@ -52,7 +52,7 @@ fn writeText(
     w: anytype,
     url: []const u8,
     results: []const crawler_mod.CrawlResult,
-    summary: link_checker_mod.CheckSummary,
+    summary: summary_mod.CheckSummary,
     include_positives: bool,
 ) !void {
     try w.print("Link Check Report\n", .{});
@@ -88,7 +88,7 @@ fn writeText(
         }
     }
 
-    const avg = if (summary.total_urls > 0) summary.total_time_ms / summary.total_urls else 0;
+    const avg = if (summary.total_urls > 0) summary.total_time_ms / @as(u64, summary.total_urls) else 0;
     const min = if (summary.min_time_ms == std.math.maxInt(u64)) 0 else summary.min_time_ms;
 
     try w.print("SUMMARY\n\n", .{});
@@ -98,7 +98,7 @@ fn writeText(
     try w.print("  Errors:    {d}\n", .{summary.error_count});
     try w.print("  Internal:  {d}\n", .{summary.internal_count});
     try w.print("  External:  {d}\n\n", .{summary.external_count});
-    try w.print("  Crawl time:  {d}ms\n", .{summary.total_time_ms});
+    try w.print("  Total response time:  {d}ms\n", .{summary.total_time_ms});
     try w.print("  Avg:         {d}ms\n", .{avg});
     try w.print("  Min:         {d}ms\n", .{min});
     try w.print("  Max:         {d}ms\n", .{summary.max_time_ms});
@@ -108,7 +108,7 @@ fn writeMarkdown(
     w: anytype,
     url: []const u8,
     results: []const crawler_mod.CrawlResult,
-    summary: link_checker_mod.CheckSummary,
+    summary: summary_mod.CheckSummary,
     include_positives: bool,
 ) !void {
     try w.print("# Link Check Report\n\n", .{});
@@ -123,9 +123,9 @@ fn writeMarkdown(
             if (!is_broken) continue;
             const type_str: []const u8 = if (r.is_internal) "internal" else "external";
             if (r.error_msg) |msg| {
-                try w.print("- **[{s}]** {s}\n  `{s}` · {d}ms\n\n", .{ msg, r.url, type_str, r.elapsed_ms });
+                try w.print("- **[{s}]** <{s}>\n  `{s}` · {d}ms\n\n", .{ msg, r.url, type_str, r.elapsed_ms });
             } else {
-                try w.print("- **[{d}]** {s}\n  `{s}` · {d}ms\n\n", .{ r.status, r.url, type_str, r.elapsed_ms });
+                try w.print("- **[{d}]** <{s}>\n  `{s}` · {d}ms\n\n", .{ r.status, r.url, type_str, r.elapsed_ms });
             }
         }
     } else {
@@ -138,11 +138,11 @@ fn writeMarkdown(
             const is_broken = r.error_msg != null or r.status >= 400;
             if (is_broken) continue;
             const type_str: []const u8 = if (r.is_internal) "internal" else "external";
-            try w.print("- **[{d}]** {s}\n  `{s}` · {d}ms\n\n", .{ r.status, r.url, type_str, r.elapsed_ms });
+            try w.print("- **[{d}]** <{s}>\n  `{s}` · {d}ms\n\n", .{ r.status, r.url, type_str, r.elapsed_ms });
         }
     }
 
-    const avg = if (summary.total_urls > 0) summary.total_time_ms / summary.total_urls else 0;
+    const avg = if (summary.total_urls > 0) summary.total_time_ms / @as(u64, summary.total_urls) else 0;
     const min = if (summary.min_time_ms == std.math.maxInt(u64)) 0 else summary.min_time_ms;
 
     try w.print("## Summary\n\n", .{});
@@ -153,7 +153,7 @@ fn writeMarkdown(
     try w.print("- Internal: {d}\n", .{summary.internal_count});
     try w.print("- External: {d}\n\n", .{summary.external_count});
     try w.print("## Timing\n\n", .{});
-    try w.print("- Crawl time: {d}ms\n", .{summary.total_time_ms});
+    try w.print("- Total response time: {d}ms\n", .{summary.total_time_ms});
     try w.print("- Avg: {d}ms\n", .{avg});
     try w.print("- Min: {d}ms\n", .{min});
     try w.print("- Max: {d}ms\n", .{summary.max_time_ms});
@@ -164,7 +164,7 @@ fn writeHtml(
     w: anytype,
     url: []const u8,
     results: []const crawler_mod.CrawlResult,
-    summary: link_checker_mod.CheckSummary,
+    summary: summary_mod.CheckSummary,
     include_positives: bool,
 ) !void {
     const escaped_url = try escapeHtml(allocator, url);
@@ -260,7 +260,7 @@ fn writeHtml(
         try w.print("</div>\n", .{});
     }
 
-    const avg = if (summary.total_urls > 0) summary.total_time_ms / summary.total_urls else 0;
+    const avg = if (summary.total_urls > 0) summary.total_time_ms / @as(u64, summary.total_urls) else 0;
     const min = if (summary.min_time_ms == std.math.maxInt(u64)) 0 else summary.min_time_ms;
 
     try w.print(
@@ -275,7 +275,7 @@ fn writeHtml(
         \\</div>
         \\<h2>Timing</h2>
         \\<div class="stats">
-        \\  <div class="stat"><div class="stat-label">Crawl time</div><div class="stat-value">{d}ms</div></div>
+        \\  <div class="stat"><div class="stat-label">Total response time</div><div class="stat-value">{d}ms</div></div>
         \\  <div class="stat"><div class="stat-label">Avg</div><div class="stat-value">{d}ms</div></div>
         \\  <div class="stat"><div class="stat-label">Min</div><div class="stat-value">{d}ms</div></div>
         \\  <div class="stat"><div class="stat-label">Max</div><div class="stat-value">{d}ms</div></div>
@@ -301,14 +301,18 @@ fn writeHtml(
 
 test "write text report to temp file" {
     const allocator = std.testing.allocator;
-    const tmp_path = "test_report_text.tmp";
-    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [4096]u8 = undefined;
+    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.tmp" });
+    defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com"), .status = 200, .links_found = 1, .is_internal = true, .error_msg = null, .elapsed_ms = 50 },
         .{ .url = @constCast("https://example.com/broken"), .status = 404, .links_found = 0, .is_internal = true, .error_msg = null, .elapsed_ms = 30 },
     };
-    const summary = link_checker_mod.CheckSummary{
+    const summary = summary_mod.CheckSummary{
         .total_urls = 2,
         .ok_count = 1,
         .broken_count = 1,
@@ -322,7 +326,7 @@ test "write text report to temp file" {
 
     try write(allocator, tmp_path, .text, "https://example.com", &results, summary, false);
 
-    const content = try std.fs.cwd().readFileAlloc(allocator, tmp_path, 65536);
+    const content = try tmp.dir.readFileAlloc(allocator, "report.tmp", 65536);
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "BROKEN LINKS") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/broken") != null);
@@ -331,13 +335,17 @@ test "write text report to temp file" {
 
 test "write markdown report to temp file" {
     const allocator = std.testing.allocator;
-    const tmp_path = "test_report_md.tmp";
-    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [4096]u8 = undefined;
+    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.md" });
+    defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com/404"), .status = 404, .links_found = 0, .is_internal = false, .error_msg = null, .elapsed_ms = 20 },
     };
-    const summary = link_checker_mod.CheckSummary{
+    const summary = summary_mod.CheckSummary{
         .total_urls = 1,
         .ok_count = 0,
         .broken_count = 1,
@@ -351,7 +359,7 @@ test "write markdown report to temp file" {
 
     try write(allocator, tmp_path, .markdown, "https://example.com", &results, summary, false);
 
-    const content = try std.fs.cwd().readFileAlloc(allocator, tmp_path, 65536);
+    const content = try tmp.dir.readFileAlloc(allocator, "report.md", 65536);
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "# Link Check Report") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "[404]") != null);
@@ -359,13 +367,17 @@ test "write markdown report to temp file" {
 
 test "write html report to temp file" {
     const allocator = std.testing.allocator;
-    const tmp_path = "test_report_html.tmp";
-    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [4096]u8 = undefined;
+    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.html" });
+    defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com/ok"), .status = 200, .links_found = 0, .is_internal = true, .error_msg = null, .elapsed_ms = 10 },
     };
-    const summary = link_checker_mod.CheckSummary{
+    const summary = summary_mod.CheckSummary{
         .total_urls = 1,
         .ok_count = 1,
         .broken_count = 0,
@@ -379,7 +391,7 @@ test "write html report to temp file" {
 
     try write(allocator, tmp_path, .html, "https://example.com", &results, summary, true);
 
-    const content = try std.fs.cwd().readFileAlloc(allocator, tmp_path, 65536);
+    const content = try tmp.dir.readFileAlloc(allocator, "report.html", 65536);
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "<!DOCTYPE html>") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/ok") != null);
@@ -387,13 +399,17 @@ test "write html report to temp file" {
 
 test "include-positives includes ok links in text report" {
     const allocator = std.testing.allocator;
-    const tmp_path = "test_report_positives.tmp";
-    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [4096]u8 = undefined;
+    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report_pos.tmp" });
+    defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com/ok"), .status = 200, .links_found = 0, .is_internal = true, .error_msg = null, .elapsed_ms = 10 },
     };
-    const summary = link_checker_mod.CheckSummary{
+    const summary = summary_mod.CheckSummary{
         .total_urls = 1,
         .ok_count = 1,
         .broken_count = 0,
@@ -407,7 +423,7 @@ test "include-positives includes ok links in text report" {
 
     try write(allocator, tmp_path, .text, "https://example.com", &results, summary, true);
 
-    const content = try std.fs.cwd().readFileAlloc(allocator, tmp_path, 65536);
+    const content = try tmp.dir.readFileAlloc(allocator, "report_pos.tmp", 65536);
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "OK LINKS") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/ok") != null);
