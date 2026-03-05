@@ -301,8 +301,12 @@ fn writeHtml(
 
 test "write text report to temp file" {
     const allocator = std.testing.allocator;
-    const tmp_path = "test_report_text.tmp";
-    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [4096]u8 = undefined;
+    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.tmp" });
+    defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com"), .status = 200, .links_found = 1, .is_internal = true, .error_msg = null, .elapsed_ms = 50 },
@@ -322,7 +326,7 @@ test "write text report to temp file" {
 
     try write(allocator, tmp_path, .text, "https://example.com", &results, summary, false);
 
-    const content = try std.fs.cwd().readFileAlloc(allocator, tmp_path, 65536);
+    const content = try tmp.dir.readFileAlloc(allocator, "report.tmp", 65536);
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "BROKEN LINKS") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/broken") != null);
@@ -331,8 +335,12 @@ test "write text report to temp file" {
 
 test "write markdown report to temp file" {
     const allocator = std.testing.allocator;
-    const tmp_path = "test_report_md.tmp";
-    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [4096]u8 = undefined;
+    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.md" });
+    defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com/404"), .status = 404, .links_found = 0, .is_internal = false, .error_msg = null, .elapsed_ms = 20 },
@@ -351,7 +359,7 @@ test "write markdown report to temp file" {
 
     try write(allocator, tmp_path, .markdown, "https://example.com", &results, summary, false);
 
-    const content = try std.fs.cwd().readFileAlloc(allocator, tmp_path, 65536);
+    const content = try tmp.dir.readFileAlloc(allocator, "report.md", 65536);
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "# Link Check Report") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "[404]") != null);
@@ -359,8 +367,12 @@ test "write markdown report to temp file" {
 
 test "write html report to temp file" {
     const allocator = std.testing.allocator;
-    const tmp_path = "test_report_html.tmp";
-    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [4096]u8 = undefined;
+    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.html" });
+    defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com/ok"), .status = 200, .links_found = 0, .is_internal = true, .error_msg = null, .elapsed_ms = 10 },
@@ -379,7 +391,7 @@ test "write html report to temp file" {
 
     try write(allocator, tmp_path, .html, "https://example.com", &results, summary, true);
 
-    const content = try std.fs.cwd().readFileAlloc(allocator, tmp_path, 65536);
+    const content = try tmp.dir.readFileAlloc(allocator, "report.html", 65536);
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "<!DOCTYPE html>") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/ok") != null);
@@ -387,8 +399,12 @@ test "write html report to temp file" {
 
 test "include-positives includes ok links in text report" {
     const allocator = std.testing.allocator;
-    const tmp_path = "test_report_positives.tmp";
-    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [4096]u8 = undefined;
+    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report_pos.tmp" });
+    defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
         .{ .url = @constCast("https://example.com/ok"), .status = 200, .links_found = 0, .is_internal = true, .error_msg = null, .elapsed_ms = 10 },
@@ -407,7 +423,7 @@ test "include-positives includes ok links in text report" {
 
     try write(allocator, tmp_path, .text, "https://example.com", &results, summary, true);
 
-    const content = try std.fs.cwd().readFileAlloc(allocator, tmp_path, 65536);
+    const content = try tmp.dir.readFileAlloc(allocator, "report_pos.tmp", 65536);
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "OK LINKS") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/ok") != null);
