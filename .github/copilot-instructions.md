@@ -1,11 +1,11 @@
-# zigcrawler – Copilot Instructions
+# argiope – Copilot Instructions
 
-`zigcrawler` is a web crawler CLI tool written in Zig (minimum version 0.15.2) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`.
+`argiope` is a web crawler CLI tool written in Zig (minimum version 0.15.2) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`.
 
 ## Build, run, and test
 
 ```sh
-zig build                          # compile → zig-out/bin/zigcrawler
+zig build                          # compile → zig-out/bin/argiope
 zig build run -- check <url>       # build + run link checker
 zig build run -- download <url>    # build + run image downloader
 zig build test                     # run all tests
@@ -26,16 +26,16 @@ main.zig  →  cli.zig  →  crawler.zig  →  http.zig
                     downloader.zig   (download mode)
 ```
 
-| File | Responsibility |
-|---|---|
-| `main.zig` | Entry point; owns `GeneralPurposeAllocator`; wires modules together |
-| `cli.zig` | CLI argument parsing for `check` and `download` subcommands |
-| `url.zig` | URL parsing (wraps `std.Uri`), normalization, relative-to-absolute resolution, same-origin |
-| `http.zig` | HTTP client wrapper using `std.http.Client` with `request/sendBodiless/receiveHead/reader` |
-| `html.zig` | HTML scanner: extracts `<a href>`, `<img src>`, `<link href>`, `<script src>`, `<iframe src>`, `srcset` |
-| `crawler.zig` | BFS crawl engine: visited `StringHashMap`, depth limiting, domain restriction, rate limiting |
-| `link_checker.zig` | Broken link reporter: collects URLs, checks status, outputs tabular report |
-| `downloader.zig` | Image downloader: saves images to `output_dir/page_N/image_N.ext` structure |
+| File               | Responsibility                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| `main.zig`         | Entry point; owns `GeneralPurposeAllocator`; wires modules together                                     |
+| `cli.zig`          | CLI argument parsing for `check` and `download` subcommands                                             |
+| `url.zig`          | URL parsing (wraps `std.Uri`), normalization, relative-to-absolute resolution, same-origin              |
+| `http.zig`         | HTTP client wrapper using `std.http.Client` with `request/sendBodiless/receiveHead/reader`              |
+| `html.zig`         | HTML scanner: extracts `<a href>`, `<img src>`, `<link href>`, `<script src>`, `<iframe src>`, `srcset` |
+| `crawler.zig`      | BFS crawl engine: visited `StringHashMap`, depth limiting, domain restriction, rate limiting            |
+| `link_checker.zig` | Broken link reporter: collects URLs, checks status, outputs tabular report                              |
+| `downloader.zig`   | Image downloader: saves images to `output_dir/page_N/image_N.ext` structure                             |
 
 ## Zig 0.15 API Notes
 
@@ -67,7 +67,8 @@ The visited set uses `StringHashMapUnmanaged` with owned key strings, freed on `
 
 **Keep README in sync:** Every feature addition, change, or fix must update the README to reflect the current state of the application. Update usage examples, architecture diagrams, feature lists, or options as needed. The README is the source of truth for users.
 
-**Commits:** 
+**Commits:**
+
 - Make commits in small logical chunks with clear one-liner descriptions for a detailed progress history.
 - Use brief commit messages (one line only).
 - Always commit as the user (the actual developer), never create commits under fictional identities like "Copilot Agent" or similar.
