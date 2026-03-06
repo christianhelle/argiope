@@ -85,12 +85,25 @@ pub fn parseChapterList(
         // Must contain our prefix
         if (std.mem.indexOf(u8, href, prefix) == null) continue;
 
-        // Extract chapter number: look for /c{number}/ pattern
+        // Extract chapter number: look for /c{number} pattern
+        // Accept both /c{N}/ and /c{N}.html formats (with or without trailing slash)
         const c_needle = "/c";
         const c_pos = std.mem.indexOf(u8, href, c_needle) orelse continue;
         const num_start = c_pos + c_needle.len;
         const rest = href[num_start..];
-        const num_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
+        
+        // Find the end of the chapter number
+        // First check if there's a slash, question mark, or hash (standard path separators)
+        const sep_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
+        
+        // If no separator was found, check for .html extension
+        var num_end = sep_end;
+        if (sep_end == rest.len) {
+            if (std.mem.indexOf(u8, rest, ".html")) |html_pos| {
+                num_end = html_pos;
+            }
+        }
+        
         if (num_end == 0) continue;
         const number_str = rest[0..num_end];
 
@@ -160,6 +173,33 @@ pub fn filterChapters(
     }
 
     return result.toOwnedSlice(allocator);
+}
+
+/// Sort chapters numerically by chapter number.
+/// Handles both integer and decimal chapter numbers (e.g., 1, 5.5, 10, 100.1).
+/// Returns a new slice with chapters sorted in ascending numeric order.
+/// Caller must free the returned slice (but not the individual chapter fields).
+pub fn sortChapters(
+    allocator: std.mem.Allocator,
+    chapters: []const MangafoxChapter,
+) ![]MangafoxChapter {
+    if (chapters.len == 0) return try allocator.alloc(MangafoxChapter, 0);
+
+    // Create a mutable copy for sorting
+    const sorted = try allocator.dupe(MangafoxChapter, chapters);
+    errdefer allocator.free(sorted);
+
+    // Sort using numeric comparison of chapter numbers
+    const Context = struct {
+        pub fn lessThan(_: @This(), a: MangafoxChapter, b: MangafoxChapter) bool {
+            const a_num = std.fmt.parseFloat(f32, a.number) catch return false;
+            const b_num = std.fmt.parseFloat(f32, b.number) catch return true;
+            return a_num < b_num;
+        }
+    };
+
+    std.mem.sort(MangafoxChapter, sorted, Context{}, Context.lessThan);
+    return sorted;
 }
 
 /// Scan HTML page for a total page count embedded in script content.
@@ -435,13 +475,25 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     try w.flush();
 
     // 3. Filter by chapter range
-    const chapters = try filterChapters(allocator, all_chapters, opts.chapters_from, opts.chapters_to);
-    defer allocator.free(chapters); // elements are borrowed from all_chapters
+    const filtered = try filterChapters(allocator, all_chapters, opts.chapters_from, opts.chapters_to);
+    defer allocator.free(filtered); // elements are borrowed from all_chapters
 
-    if (chapters.len == 0) {
+    if (filtered.len == 0) {
         try w.print("No chapters match the specified range.\n", .{});
         try w.flush();
         return 0;
+    }
+
+    // 4. Sort chapters numerically (handles both integers and decimals like 5.5, 100.1)
+    const chapters = try sortChapters(allocator, filtered);
+    defer allocator.free(chapters); // sorted slice, elements still borrowed from all_chapters
+
+    if (opts.verbose) {
+        try w.print("Chapter order after sorting:\n", .{});
+        for (chapters) |ch| {
+            try w.print("  {s}\n", .{ch.number});
+        }
+        try w.flush();
     }
 
     try w.print("Downloading {d} chapter(s).\n\n", .{chapters.len});
@@ -964,6 +1016,89 @@ test "filterChapters no range" {
     const filtered = try filterChapters(allocator, &chapters, null, null);
     defer allocator.free(filtered);
     try std.testing.expect(filtered.len == 2);
+}
+
+test "sortChapters numeric order" {
+    const allocator = std.testing.allocator;
+    const chapters = [_]MangafoxChapter{
+        .{ .number = "10", .url = "u10" },
+        .{ .number = "1", .url = "u1" },
+        .{ .number = "2", .url = "u2" },
+        .{ .number = "100", .url = "u100" },
+        .{ .number = "5", .url = "u5" },
+    };
+    const sorted = try sortChapters(allocator, &chapters);
+    defer allocator.free(sorted);
+    try std.testing.expect(sorted.len == 5);
+    try std.testing.expectEqualStrings("1", sorted[0].number);
+    try std.testing.expectEqualStrings("2", sorted[1].number);
+    try std.testing.expectEqualStrings("5", sorted[2].number);
+    try std.testing.expectEqualStrings("10", sorted[3].number);
+    try std.testing.expectEqualStrings("100", sorted[4].number);
+}
+
+test "sortChapters with decimals" {
+    const allocator = std.testing.allocator;
+    const chapters = [_]MangafoxChapter{
+        .{ .number = "5", .url = "u5" },
+        .{ .number = "5.5", .url = "u5.5" },
+        .{ .number = "6", .url = "u6" },
+        .{ .number = "5.1", .url = "u5.1" },
+        .{ .number = "1", .url = "u1" },
+    };
+    const sorted = try sortChapters(allocator, &chapters);
+    defer allocator.free(sorted);
+    try std.testing.expect(sorted.len == 5);
+    try std.testing.expectEqualStrings("1", sorted[0].number);
+    try std.testing.expectEqualStrings("5", sorted[1].number);
+    try std.testing.expectEqualStrings("5.1", sorted[2].number);
+    try std.testing.expectEqualStrings("5.5", sorted[3].number);
+    try std.testing.expectEqualStrings("6", sorted[4].number);
+}
+
+test "sortChapters already sorted" {
+    const allocator = std.testing.allocator;
+    const chapters = [_]MangafoxChapter{
+        .{ .number = "1", .url = "u1" },
+        .{ .number = "2", .url = "u2" },
+        .{ .number = "3", .url = "u3" },
+    };
+    const sorted = try sortChapters(allocator, &chapters);
+    defer allocator.free(sorted);
+    try std.testing.expect(sorted.len == 3);
+    try std.testing.expectEqualStrings("1", sorted[0].number);
+    try std.testing.expectEqualStrings("2", sorted[1].number);
+    try std.testing.expectEqualStrings("3", sorted[2].number);
+}
+
+test "sortChapters empty" {
+    const allocator = std.testing.allocator;
+    const chapters = [_]MangafoxChapter{};
+    const sorted = try sortChapters(allocator, &chapters);
+    defer allocator.free(sorted);
+    try std.testing.expect(sorted.len == 0);
+}
+
+test "parseChapterList without trailing slash" {
+    const html =
+        \\<ul>
+        \\  <li><a href="/manga/naruto/c100.html">Chapter 100</a></li>
+        \\  <li><a href="/manga/naruto/c99.html">Chapter 99</a></li>
+        \\  <li><a href="/manga/naruto/c10.5.html">Chapter 10.5</a></li>
+        \\</ul>
+    ;
+    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net");
+    defer {
+        for (chapters) |ch| {
+            std.testing.allocator.free(ch.number);
+            std.testing.allocator.free(ch.url);
+        }
+        std.testing.allocator.free(chapters);
+    }
+    try std.testing.expect(chapters.len == 3);
+    try std.testing.expectEqualStrings("100", chapters[0].number);
+    try std.testing.expectEqualStrings("99", chapters[1].number);
+    try std.testing.expectEqualStrings("10.5", chapters[2].number);
 }
 
 test "parsePageCount var pcount" {
