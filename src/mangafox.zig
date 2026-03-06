@@ -226,6 +226,116 @@ pub fn parseChapterList(
     return chapters.toOwnedSlice(allocator);
 }
 
+/// Parse the chapter list from a fanfox.net RSS feed.
+/// The RSS format has <link>URL</link> elements for each chapter.
+/// Returns an owned slice; caller frees each item's fields and the slice itself.
+/// If verbose is true, logs parsing diagnostics to stderr.
+pub fn parseChapterListFromRss(
+    allocator: std.mem.Allocator,
+    xml: []const u8,
+    slug: []const u8,
+    verbose: bool,
+) ![]MangafoxChapter {
+    var chapters: std.ArrayListUnmanaged(MangafoxChapter) = .empty;
+    errdefer {
+        for (chapters.items) |ch| {
+            allocator.free(ch.number);
+            allocator.free(ch.url);
+        }
+        chapters.deinit(allocator);
+    }
+
+    // Build the path prefix we're searching for: /manga/{slug}/
+    var prefix_buf: [512]u8 = undefined;
+    const prefix = std.fmt.bufPrint(&prefix_buf, "/manga/{s}/", .{slug}) catch |e| {
+        if (e == error.NoSpaceLeft) return error.SlugTooLong;
+        return e;
+    };
+
+    if (verbose) {
+        var err_buf: [256]u8 = undefined;
+        var efw = std.fs.File.stderr().writer(&err_buf);
+        efw.interface.print("[parseChapterListFromRss] Searching for pattern: {s}\n", .{prefix}) catch {};
+        efw.interface.flush() catch {};
+    }
+
+    var pos: usize = 0;
+    var link_count: usize = 0;
+    while (pos < xml.len) {
+        // Find next <link> tag
+        const link_open = std.mem.indexOfPos(u8, xml, pos, "<link>") orelse break;
+        const val_start = link_open + "<link>".len;
+        const link_close = std.mem.indexOfPos(u8, xml, val_start, "</link>") orelse break;
+        const link_url = xml[val_start..link_close];
+        pos = link_close + "</link>".len;
+        link_count += 1;
+
+        // Must contain our prefix
+        if (std.mem.indexOf(u8, link_url, prefix) == null) continue;
+
+        // Extract chapter number: look for /c{digit} pattern
+        const c_needle = "/c";
+        const c_pos = std.mem.indexOf(u8, link_url, c_needle) orelse continue;
+        const after_c_pos = c_pos + c_needle.len;
+        if (after_c_pos >= link_url.len or link_url[after_c_pos] < '0' or link_url[after_c_pos] > '9') continue;
+
+        const num_start = after_c_pos;
+        const rest = link_url[num_start..];
+
+        // Find end of chapter number (slash, question, hash, or .html)
+        const sep_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
+        var num_end = sep_end;
+        if (sep_end == rest.len) {
+            if (std.mem.lastIndexOf(u8, rest, ".html")) |html_pos| {
+                num_end = html_pos;
+            }
+        }
+        if (num_end == 0) continue;
+        const number_str = rest[0..num_end];
+
+        if (!looksLikeNumber(number_str)) continue;
+
+        // Use the URL as-is if absolute; the RSS always provides absolute URLs
+        const abs_url = if (std.mem.startsWith(u8, link_url, "http://") or
+            std.mem.startsWith(u8, link_url, "https://"))
+            try allocator.dupe(u8, link_url)
+        else
+            try std.fmt.allocPrint(allocator, "https://fanfox.net{s}", .{link_url});
+        errdefer allocator.free(abs_url);
+
+        const number_copy = try allocator.dupe(u8, number_str);
+        errdefer allocator.free(number_copy);
+
+        // Deduplicate by chapter number
+        var found = false;
+        for (chapters.items) |existing| {
+            if (std.mem.eql(u8, existing.number, number_copy)) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            allocator.free(abs_url);
+            allocator.free(number_copy);
+            continue;
+        }
+
+        try chapters.append(allocator, MangafoxChapter{
+            .number = number_copy,
+            .url = abs_url,
+        });
+    }
+
+    if (verbose) {
+        var err_buf: [256]u8 = undefined;
+        var efw = std.fs.File.stderr().writer(&err_buf);
+        efw.interface.print("[parseChapterListFromRss] Total links examined: {d}, chapters found: {d}\n", .{ link_count, chapters.items.len }) catch {};
+        efw.interface.flush() catch {};
+    }
+
+    return chapters.toOwnedSlice(allocator);
+}
+
 /// Filter chapters by optional from/to range (inclusive).
 /// Returns a new slice of pointers into the original; caller frees only the slice itself.
 pub fn filterChapters(
@@ -511,28 +621,57 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         .user_agent = user_agent,
     };
 
-    // 1. Fetch manga index page
+    // 1. Try RSS feed first — bypasses JavaScript-rendered chapter lists
+    const rss_url = try std.fmt.allocPrint(allocator, "https://fanfox.net/rss/{s}.xml", .{slug});
+    defer allocator.free(rss_url);
+
     if (opts.verbose) {
-        try w.print("Fetching chapter list from {s}\n", .{url});
+        try w.print("Fetching chapter list via RSS: {s}\n", .{rss_url});
         try w.flush();
     }
 
-    var index_resp = http_mod.fetch(&client, allocator, url, fetch_opts) catch |err| {
-        printErr("Failed to fetch manga page: {s}", .{@errorName(err)});
-        return 1;
-    };
-    defer index_resp.deinit();
+    var rss_chapters: []MangafoxChapter = &.{};
+    if (http_mod.fetch(&client, allocator, rss_url, fetch_opts)) |rss_resp_val| {
+        var rss_resp = rss_resp_val;
+        defer rss_resp.deinit();
+        if (rss_resp.isSuccess()) {
+            rss_chapters = parseChapterListFromRss(allocator, rss_resp.body, slug, opts.verbose) catch &.{};
+        }
+    } else |_| {}
 
-    if (!index_resp.isSuccess()) {
-        printErr("Manga page returned HTTP {d}", .{index_resp.status});
-        return 1;
+    // 2. Fall back to HTML parsing if RSS returned nothing
+    var html_chapters: []MangafoxChapter = &.{};
+    var index_resp_opt: ?http_mod.Response = null;
+    defer if (index_resp_opt) |*r| r.deinit();
+
+    if (rss_chapters.len == 0) {
+        if (opts.verbose) {
+            try w.print("RSS empty or unavailable, falling back to HTML parsing.\n", .{});
+            try w.print("Fetching chapter list from {s}\n", .{url});
+            try w.flush();
+        }
+
+        var index_resp = http_mod.fetch(&client, allocator, url, fetch_opts) catch |err| {
+            printErr("Failed to fetch manga page: {s}", .{@errorName(err)});
+            return 1;
+        };
+        index_resp_opt = index_resp;
+
+        if (!index_resp.isSuccess()) {
+            printErr("Manga page returned HTTP {d}", .{index_resp.status});
+            return 1;
+        }
+
+        html_chapters = parseChapterList(allocator, index_resp.body, slug, url, opts.verbose) catch |err| {
+            printErr("Failed to parse chapter list: {s}", .{@errorName(err)});
+            return 1;
+        };
+    } else if (opts.verbose) {
+        try w.print("RSS: found {d} chapter(s).\n", .{rss_chapters.len});
+        try w.flush();
     }
 
-    // 2. Parse chapter list
-    const all_chapters = parseChapterList(allocator, index_resp.body, slug, url, opts.verbose) catch |err| {
-        printErr("Failed to parse chapter list: {s}", .{@errorName(err)});
-        return 1;
-    };
+    const all_chapters = if (rss_chapters.len > 0) rss_chapters else html_chapters;
     defer {
         for (all_chapters) |ch| {
             allocator.free(ch.number);
@@ -1064,6 +1203,92 @@ test "parseChapterList" {
     try std.testing.expectEqualStrings("699", chapters[1].number);
     try std.testing.expectEqualStrings("https://fanfox.net/manga/naruto/c699/1.html", chapters[1].url);
     try std.testing.expectEqualStrings("5.5", chapters[2].number);
+}
+
+test "parseChapterListFromRss basic" {
+    const xml =
+        \\<?xml version="1.0" encoding="utf-8"?>
+        \\<rss version="2.0"><channel>
+        \\<link>https://fanfox.net/</link>
+        \\<item><title>Naruto Ch.700</title><link>https://fanfox.net/manga/naruto/c700/1.html</link></item>
+        \\<item><title>Naruto Ch.699</title><link>https://fanfox.net/manga/naruto/c699/1.html</link></item>
+        \\<item><title>Naruto Ch.5.5</title><link>https://fanfox.net/manga/naruto/c5.5/1.html</link></item>
+        \\</channel></rss>
+    ;
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    defer {
+        for (chapters) |ch| {
+            std.testing.allocator.free(ch.number);
+            std.testing.allocator.free(ch.url);
+        }
+        std.testing.allocator.free(chapters);
+    }
+    try std.testing.expect(chapters.len == 3);
+    try std.testing.expectEqualStrings("700", chapters[0].number);
+    try std.testing.expectEqualStrings("https://fanfox.net/manga/naruto/c700/1.html", chapters[0].url);
+    try std.testing.expectEqualStrings("699", chapters[1].number);
+    try std.testing.expectEqualStrings("5.5", chapters[2].number);
+}
+
+test "parseChapterListFromRss filters non-chapter links" {
+    // Channel-level <link> and image <link> should not appear in results
+    const xml =
+        \\<rss><channel>
+        \\<link>https://fanfox.net/</link>
+        \\<image><link>https://fanfox.net/</link></image>
+        \\<item><title>Seventh Ch.001</title><link>https://fanfox.net/manga/seventh/c001/1.html</link></item>
+        \\<item><title>Seventh Ch.002</title><link>https://fanfox.net/manga/seventh/c002/1.html</link></item>
+        \\</channel></rss>
+    ;
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "seventh", false);
+    defer {
+        for (chapters) |ch| {
+            std.testing.allocator.free(ch.number);
+            std.testing.allocator.free(ch.url);
+        }
+        std.testing.allocator.free(chapters);
+    }
+    try std.testing.expect(chapters.len == 2);
+    try std.testing.expectEqualStrings("001", chapters[0].number);
+    try std.testing.expectEqualStrings("002", chapters[1].number);
+}
+
+test "parseChapterListFromRss deduplicates" {
+    const xml =
+        \\<rss><channel>
+        \\<item><link>https://fanfox.net/manga/naruto/c100/1.html</link></item>
+        \\<item><link>https://fanfox.net/manga/naruto/c100/1.html</link></item>
+        \\<item><link>https://fanfox.net/manga/naruto/c101/1.html</link></item>
+        \\</channel></rss>
+    ;
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    defer {
+        for (chapters) |ch| {
+            std.testing.allocator.free(ch.number);
+            std.testing.allocator.free(ch.url);
+        }
+        std.testing.allocator.free(chapters);
+    }
+    try std.testing.expect(chapters.len == 2);
+}
+
+test "parseChapterListFromRss empty feed" {
+    const xml = "<?xml version=\"1.0\"?><rss><channel></channel></rss>";
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    defer std.testing.allocator.free(chapters);
+    try std.testing.expect(chapters.len == 0);
+}
+
+test "parseChapterListFromRss wrong slug filtered" {
+    // Links for a different manga should not match
+    const xml =
+        \\<rss><channel>
+        \\<item><link>https://fanfox.net/manga/bleach/c700/1.html</link></item>
+        \\</channel></rss>
+    ;
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    defer std.testing.allocator.free(chapters);
+    try std.testing.expect(chapters.len == 0);
 }
 
 test "filterChapters range" {
