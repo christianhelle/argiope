@@ -6,13 +6,13 @@ on:
       operation_mode:
         description: 'Operation mode: "check" for link validation or "images" for media download'
         required: true
-        default: 'check'
+        default: "check"
         type: choice
         options:
           - check
           - images
       url:
-        description: 'Target URL to test (e.g., https://example.com or https://fanfox.net/manga/title)'
+        description: "Target URL to test (e.g., https://example.com or https://fanfox.net/manga/title)"
         required: true
         type: string
       chapter_range:
@@ -20,23 +20,19 @@ on:
         required: false
         type: string
       verbose_mode:
-        description: 'Enable verbose output to see detailed progress'
+        description: "Enable verbose output to see detailed progress"
         required: false
         default: false
         type: boolean
       include_positives:
-        description: 'Include successful links in the report (check mode only). Shows all checked URLs, not just broken ones.'
+        description: "Include successful links in the report (check mode only). Shows all checked URLs, not just broken ones."
         required: false
         default: false
         type: boolean
 
 jobs:
   test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -54,17 +50,17 @@ jobs:
         shell: bash
         run: |
           ARGS="${{ github.event.inputs.url }}"
-          
+
           if [[ "${{ github.event.inputs.verbose_mode }}" == "true" ]]; then
             ARGS="$ARGS --verbose"
           fi
-          
+
           ARGS="$ARGS --report report.md --report-format markdown"
-          
+
           if [[ "${{ github.event.inputs.include_positives }}" == "true" ]]; then
             ARGS="$ARGS --include-positives"
           fi
-          
+
           zig-out/bin/argiope check $ARGS
           echo "exit_code=$?" >> $GITHUB_OUTPUT
 
@@ -74,15 +70,15 @@ jobs:
         shell: bash
         run: |
           ARGS="${{ github.event.inputs.url }} -o ./output"
-          
+
           if [[ "${{ github.event.inputs.verbose_mode }}" == "true" ]]; then
             ARGS="$ARGS --verbose"
           fi
-          
+
           if [[ -n "${{ github.event.inputs.chapter_range }}" ]]; then
             ARGS="$ARGS --chapters ${{ github.event.inputs.chapter_range }}"
           fi
-          
+
           zig-out/bin/argiope images $ARGS
           echo "exit_code=$?" >> $GITHUB_OUTPUT
 
@@ -130,7 +126,7 @@ jobs:
           echo "**Chapter Range:** ${{ github.event.inputs.chapter_range || 'All chapters' }}" >> $GITHUB_STEP_SUMMARY
           echo "**Verbose Mode:** ${{ github.event.inputs.verbose_mode }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ -d "output" ]; then
             FILE_COUNT=$(find output -type f | wc -l)
             echo "**Files Downloaded:** $FILE_COUNT" >> $GITHUB_STEP_SUMMARY
