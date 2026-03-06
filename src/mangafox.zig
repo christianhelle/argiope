@@ -132,16 +132,17 @@ pub fn parseChapterList(
         const num_start = after_c_pos;
         const rest = href[num_start..];
         
-        // Find the end of the chapter number
-        // First check if there's a slash, question mark, or hash (standard path separators)
+        // Find the end of the chapter number: stop at first '/', '?' or '#'
         const sep_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
-        
-        // If no separator was found, check for .html extension
+
+        // Start with that position, then strip optional ".html" suffix immediately before it.
+        // This handles URLs like "/c100.html", "/c100.html?foo=bar", and "/c100.html#x".
         var num_end = sep_end;
-        if (sep_end == rest.len) {
-            if (std.mem.lastIndexOf(u8, rest, ".html")) |html_pos| {
-                num_end = html_pos;
-            }
+        const html_suffix = ".html";
+        if (sep_end >= html_suffix.len and
+            std.mem.endsWith(u8, rest[0..sep_end], html_suffix))
+        {
+            num_end = sep_end - html_suffix.len;
         }
         
         if (num_end == 0) {
@@ -282,13 +283,13 @@ pub fn parseChapterListFromRss(
         const num_start = after_c_pos;
         const rest = link_url[num_start..];
 
-        // Find end of chapter number (slash, question, hash, or .html)
+        // Find end of chapter number (slash, question, hash)
         const sep_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
         var num_end = sep_end;
-        if (sep_end == rest.len) {
-            if (std.mem.lastIndexOf(u8, rest, ".html")) |html_pos| {
-                num_end = html_pos;
-            }
+        // Allow an optional ".html" suffix before any separator or string end
+        const search_slice = rest[0..sep_end];
+        if (std.mem.lastIndexOf(u8, search_slice, ".html")) |html_pos| {
+            num_end = html_pos;
         }
         if (num_end == 0) continue;
         const number_str = rest[0..num_end];
@@ -371,20 +372,43 @@ pub fn sortChapters(
 ) ![]MangafoxChapter {
     if (chapters.len == 0) return try allocator.alloc(MangafoxChapter, 0);
 
-    // Create a mutable copy for sorting
-    const sorted = try allocator.dupe(MangafoxChapter, chapters);
-    errdefer allocator.free(sorted);
+    const ParsedChapter = struct {
+        chapter: MangafoxChapter,
+        num: f64,
+        index: usize,
+    };
 
-    // Sort using numeric comparison of chapter numbers
+    var parsed = try allocator.alloc(ParsedChapter, chapters.len);
+    errdefer allocator.free(parsed);
+
+    for (chapters, 0..) |ch, i| {
+        const num = std.fmt.parseFloat(f64, ch.number) catch std.math.inf(f64);
+        parsed[i] = .{
+            .chapter = ch,
+            .num = num,
+            .index = i,
+        };
+    }
+
     const Context = struct {
-        pub fn lessThan(_: @This(), a: MangafoxChapter, b: MangafoxChapter) bool {
-            const a_num = std.fmt.parseFloat(f32, a.number) catch return false;
-            const b_num = std.fmt.parseFloat(f32, b.number) catch return true;
-            return a_num < b_num;
+        pub fn lessThan(_: @This(), a: ParsedChapter, b: ParsedChapter) bool {
+            if (a.num < b.num) return true;
+            if (a.num > b.num) return false;
+            // Deterministic tie-breaker preserving original order for equal chapter numbers
+            return a.index < b.index;
         }
     };
 
-    std.mem.sort(MangafoxChapter, sorted, Context{}, Context.lessThan);
+    std.mem.sort(ParsedChapter, parsed, Context{}, Context.lessThan);
+
+    const sorted = try allocator.alloc(MangafoxChapter, chapters.len);
+    errdefer allocator.free(sorted);
+
+    for (parsed, 0..) |p, i| {
+        sorted[i] = p.chapter;
+    }
+
+    allocator.free(parsed);
     return sorted;
 }
 
