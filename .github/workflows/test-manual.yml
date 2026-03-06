@@ -89,7 +89,6 @@ jobs:
           echo "## Link Check Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**URL:** ${{ github.event.inputs.url }}" >> $GITHUB_STEP_SUMMARY
-          echo "**OS:** ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
           echo "**Verbose Mode:** ${{ github.event.inputs.verbose_mode }}" >> $GITHUB_STEP_SUMMARY
           echo "**Include Positives:** ${{ github.event.inputs.include_positives }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -102,17 +101,17 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
-            powershell -Command "Compress-Archive -Path output -DestinationPath output_${{ matrix.os }}.zip"
+            powershell -Command "Compress-Archive -Path output -DestinationPath output.zip"
           else
-            zip -r output_${{ matrix.os }}.zip output/
+            zip -r output.zip output/
           fi
 
       - name: Upload artifacts (images mode)
         if: github.event.inputs.operation_mode == 'images'
         uses: actions/upload-artifact@v4
         with:
-          name: downloaded-images-${{ matrix.os }}
-          path: output_${{ matrix.os }}.zip
+          name: downloaded-images
+          path: output.zip
           retention-days: 7
 
       - name: Display summary (images mode)
@@ -122,7 +121,6 @@ jobs:
           echo "## Image Download Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**URL:** ${{ github.event.inputs.url }}" >> $GITHUB_STEP_SUMMARY
-          echo "**OS:** ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
           echo "**Chapter Range:** ${{ github.event.inputs.chapter_range || 'All chapters' }}" >> $GITHUB_STEP_SUMMARY
           echo "**Verbose Mode:** ${{ github.event.inputs.verbose_mode }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -132,7 +130,7 @@ jobs:
             echo "**Files Downloaded:** $FILE_COUNT" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Download Location" >> $GITHUB_STEP_SUMMARY
-            echo "Artifacts are available for download: **downloaded-images-${{ matrix.os }}.zip**" >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts are available for download: **downloaded-images.zip**" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ Output folder not found. Check command output above for errors." >> $GITHUB_STEP_SUMMARY
           fi
