@@ -98,6 +98,16 @@ argiope images https://fanfox.net/manga/naruto -o ./manga
 argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
 ```
 
+**Chapter ordering:** Chapters are always downloaded in numeric order (1, 2, 10, 11, 100), not alphabetic order. Decimal chapter numbers (e.g., 5.5, 100.1) are fully supported and sorted correctly between their integer neighbors.
+
+**Troubleshooting:** If chapters are missing or not detected, use `--verbose` to see detailed chapter discovery information:
+
+```sh
+argiope images https://fanfox.net/manga/title --verbose
+```
+
+This will show all chapters found and the order they will be downloaded in.
+
 ### Verbose Mode
 
 For detailed progress output while crawling:
