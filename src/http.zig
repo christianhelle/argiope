@@ -95,11 +95,17 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
                     .percent_encoded => |r| r,
                 };
                 const port = uri.port;
-                const n = if (port) |p|
-                    std.fmt.bufPrint(&location_buf, "{s}://{s}:{d}{s}", .{ scheme, host, p, location }) catch return error.ConnectionFailed
+                // scheme/host may alias location_buf when current_url was built
+                // from a previous redirect.  Build into a separate buffer first,
+                // then copy into location_buf to avoid @memcpy aliasing panics.
+                var build_buf: [4096]u8 = undefined;
+                const built = if (port) |p|
+                    std.fmt.bufPrint(&build_buf, "{s}://{s}:{d}{s}", .{ scheme, host, p, location }) catch return error.ConnectionFailed
                 else
-                    std.fmt.bufPrint(&location_buf, "{s}://{s}{s}", .{ scheme, host, location }) catch return error.ConnectionFailed;
-                break :blk n;
+                    std.fmt.bufPrint(&build_buf, "{s}://{s}{s}", .{ scheme, host, location }) catch return error.ConnectionFailed;
+                if (built.len > location_buf.len) return error.ConnectionFailed;
+                @memcpy(location_buf[0..built.len], built);
+                break :blk location_buf[0..built.len];
             };
 
             if (new_url.ptr != location_buf[0..].ptr) {
