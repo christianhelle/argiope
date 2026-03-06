@@ -1,0 +1,142 @@
+name: Manual Test - Link Checking & Image Download
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation_mode:
+        description: 'Operation mode: "check" for link validation or "images" for media download'
+        required: true
+        default: 'check'
+        type: choice
+        options:
+          - check
+          - images
+      url:
+        description: 'Target URL to test (e.g., https://example.com or https://fanfox.net/manga/title)'
+        required: true
+        type: string
+      chapter_range:
+        description: 'Chapter range for fanfox.net downloads (e.g., "1-10" for chapters 1 through 10, or leave empty for all chapters). Only used in images mode.'
+        required: false
+        type: string
+      verbose_mode:
+        description: 'Enable verbose output to see detailed progress'
+        required: false
+        default: false
+        type: boolean
+      include_positives:
+        description: 'Include successful links in the report (check mode only). Shows all checked URLs, not just broken ones.'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Build argiope
+        run: zig build
+
+      - name: Run check command
+        if: github.event.inputs.operation_mode == 'check'
+        id: check_run
+        shell: bash
+        run: |
+          ARGS="${{ github.event.inputs.url }}"
+          
+          if [[ "${{ github.event.inputs.verbose_mode }}" == "true" ]]; then
+            ARGS="$ARGS --verbose"
+          fi
+          
+          ARGS="$ARGS --report report.md --report-format markdown"
+          
+          if [[ "${{ github.event.inputs.include_positives }}" == "true" ]]; then
+            ARGS="$ARGS --include-positives"
+          fi
+          
+          zig-out/bin/argiope check $ARGS
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Run images command
+        if: github.event.inputs.operation_mode == 'images'
+        id: images_run
+        shell: bash
+        run: |
+          ARGS="${{ github.event.inputs.url }} -o ./output"
+          
+          if [[ "${{ github.event.inputs.verbose_mode }}" == "true" ]]; then
+            ARGS="$ARGS --verbose"
+          fi
+          
+          if [[ -n "${{ github.event.inputs.chapter_range }}" ]]; then
+            ARGS="$ARGS --chapters ${{ github.event.inputs.chapter_range }}"
+          fi
+          
+          zig-out/bin/argiope images $ARGS
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Display report in summary (check mode)
+        if: github.event.inputs.operation_mode == 'check'
+        shell: bash
+        run: |
+          echo "## Link Check Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ github.event.inputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**OS:** ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Verbose Mode:** ${{ github.event.inputs.verbose_mode }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Include Positives:** ${{ github.event.inputs.include_positives }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          cat report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Archive output folder (images mode)
+        if: github.event.inputs.operation_mode == 'images'
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            powershell -Command "Compress-Archive -Path output -DestinationPath output_${{ matrix.os }}.zip"
+          else
+            zip -r output_${{ matrix.os }}.zip output/
+          fi
+
+      - name: Upload artifacts (images mode)
+        if: github.event.inputs.operation_mode == 'images'
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloaded-images-${{ matrix.os }}
+          path: output_${{ matrix.os }}.zip
+          retention-days: 7
+
+      - name: Display summary (images mode)
+        if: github.event.inputs.operation_mode == 'images'
+        shell: bash
+        run: |
+          echo "## Image Download Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ github.event.inputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**OS:** ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Chapter Range:** ${{ github.event.inputs.chapter_range || 'All chapters' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Verbose Mode:** ${{ github.event.inputs.verbose_mode }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -d "output" ]; then
+            FILE_COUNT=$(find output -type f | wc -l)
+            echo "**Files Downloaded:** $FILE_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Download Location" >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts are available for download: **downloaded-images-${{ matrix.os }}.zip**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Output folder not found. Check command output above for errors." >> $GITHUB_STEP_SUMMARY
+          fi
