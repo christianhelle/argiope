@@ -108,7 +108,7 @@ pub fn parseChapterList(
         // Accept both /c{N}/ and /c{N}.html formats (with or without trailing slash)
         const c_needle = "/c";
         const c_pos = std.mem.indexOf(u8, href, c_needle) orelse {
-            if (verbose and href_count <= 10) {
+            if (verbose and href_count <= 20) {
                 var err_buf: [512]u8 = undefined;
                 var efw = std.fs.File.stderr().writer(&err_buf);
                 efw.interface.print("  href #{d}: no /c pattern: {s}\n", .{ href_count, href }) catch {};
@@ -116,7 +116,20 @@ pub fn parseChapterList(
             }
             continue;
         };
-        const num_start = c_pos + c_needle.len;
+        
+        // Validate that /c is followed by a digit (prevents false positives like "/collection")
+        const after_c_pos = c_pos + c_needle.len;
+        if (after_c_pos >= href.len or href[after_c_pos] < '0' or href[after_c_pos] > '9') {
+            if (verbose and href_count <= 20) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: /c not followed by digit: {s}\n", .{ href_count, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        }
+        
+        const num_start = after_c_pos;
         const rest = href[num_start..];
         
         // Find the end of the chapter number
@@ -126,13 +139,13 @@ pub fn parseChapterList(
         // If no separator was found, check for .html extension
         var num_end = sep_end;
         if (sep_end == rest.len) {
-            if (std.mem.indexOf(u8, rest, ".html")) |html_pos| {
+            if (std.mem.lastIndexOf(u8, rest, ".html")) |html_pos| {
                 num_end = html_pos;
             }
         }
         
         if (num_end == 0) {
-            if (verbose and href_count <= 10) {
+            if (verbose and href_count <= 20) {
                 var err_buf: [512]u8 = undefined;
                 var efw = std.fs.File.stderr().writer(&err_buf);
                 efw.interface.print("  href #{d}: empty number after /c: {s}\n", .{ href_count, href }) catch {};
@@ -144,7 +157,7 @@ pub fn parseChapterList(
 
         // Validate it looks like a number (digits and optional one dot)
         if (!looksLikeNumber(number_str)) {
-            if (verbose and href_count <= 10) {
+            if (verbose and href_count <= 20) {
                 var err_buf: [512]u8 = undefined;
                 var efw = std.fs.File.stderr().writer(&err_buf);
                 efw.interface.print("  href #{d}: invalid number format '{s}': {s}\n", .{ href_count, number_str, href }) catch {};
@@ -179,7 +192,7 @@ pub fn parseChapterList(
             }
         }
         if (found) {
-            if (verbose and href_count <= 10) {
+            if (verbose and href_count <= 20) {
                 var err_buf: [256]u8 = undefined;
                 var efw = std.fs.File.stderr().writer(&err_buf);
                 efw.interface.print("  href #{d}: duplicate chapter {s}\n", .{ href_count, number_copy }) catch {};
@@ -190,7 +203,7 @@ pub fn parseChapterList(
             continue;
         }
 
-        if (verbose and href_count <= 10) {
+        if (verbose and href_count <= 20) {
             var err_buf: [256]u8 = undefined;
             var efw = std.fs.File.stderr().writer(&err_buf);
             efw.interface.print("  href #{d}: MATCHED chapter {s}\n", .{ href_count, number_copy }) catch {};
