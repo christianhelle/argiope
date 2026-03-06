@@ -98,6 +98,8 @@ argiope images https://fanfox.net/manga/naruto -o ./manga
 argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
 ```
 
+**Chapter detection:** The tool fetches the manga's RSS feed (`https://fanfox.net/rss/{slug}.xml`) as the primary chapter source. This reliably detects all chapters, including those on manga titles where the chapter list is loaded dynamically via JavaScript (which static HTML parsing cannot see). If the RSS feed is unavailable or empty, the tool automatically falls back to HTML parsing.
+
 **Chapter ordering:** Chapters are always downloaded in numeric order (1, 2, 10, 11, 100), not alphabetic order. Decimal chapter numbers (e.g., 5.5, 100.1) are fully supported and sorted correctly between their integer neighbors.
 
 **Troubleshooting:** If chapters are missing or not detected, use `--verbose` to see detailed chapter discovery information:
