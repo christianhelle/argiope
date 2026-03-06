@@ -36,11 +36,13 @@ pub fn isValidSlug(slug: []const u8) bool {
 /// Parse the chapter list HTML for a given manga slug.
 /// Looks for anchor hrefs matching /manga/{slug}/[v.../]c{number}/
 /// Returns an owned slice; caller frees each item's fields and the slice itself.
+/// If verbose is true, logs all examined hrefs and rejection reasons to stderr for debugging.
 pub fn parseChapterList(
     allocator: std.mem.Allocator,
     html: []const u8,
     slug: []const u8,
     base_url: []const u8,
+    verbose: bool,
 ) ![]MangafoxChapter {
     var chapters: std.ArrayListUnmanaged(MangafoxChapter) = .empty;
     errdefer {
@@ -58,7 +60,15 @@ pub fn parseChapterList(
         return e;
     };
 
+    if (verbose) {
+        var err_buf: [256]u8 = undefined;
+        var efw = std.fs.File.stderr().writer(&err_buf);
+        efw.interface.print("[parseChapterList] Searching for pattern: {s}\n", .{prefix}) catch {};
+        efw.interface.flush() catch {};
+    }
+
     var pos: usize = 0;
+    var href_count: usize = 0;
     while (pos < html.len) {
         // Find next href=" or href='
         const href_start = blk: {
@@ -81,21 +91,80 @@ pub fn parseChapterList(
         };
         const href = html[val_start..val_end];
         pos = val_end + 1;
+        href_count += 1;
 
         // Must contain our prefix
-        if (std.mem.indexOf(u8, href, prefix) == null) continue;
+        if (std.mem.indexOf(u8, href, prefix) == null) {
+            if (verbose and href_count <= 10) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: no prefix match: {s}\n", .{ href_count, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        }
 
-        // Extract chapter number: look for /c{number}/ pattern
+        // Extract chapter number: look for /c{number} pattern
+        // Accept both /c{N}/ and /c{N}.html formats (with or without trailing slash)
         const c_needle = "/c";
-        const c_pos = std.mem.indexOf(u8, href, c_needle) orelse continue;
-        const num_start = c_pos + c_needle.len;
+        const c_pos = std.mem.indexOf(u8, href, c_needle) orelse {
+            if (verbose and href_count <= 20) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: no /c pattern: {s}\n", .{ href_count, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        };
+        
+        // Validate that /c is followed by a digit (prevents false positives like "/collection")
+        const after_c_pos = c_pos + c_needle.len;
+        if (after_c_pos >= href.len or href[after_c_pos] < '0' or href[after_c_pos] > '9') {
+            if (verbose and href_count <= 20) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: /c not followed by digit: {s}\n", .{ href_count, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        }
+        
+        const num_start = after_c_pos;
         const rest = href[num_start..];
-        const num_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
-        if (num_end == 0) continue;
+        
+        // Find the end of the chapter number
+        // First check if there's a slash, question mark, or hash (standard path separators)
+        const sep_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
+        
+        // If no separator was found, check for .html extension
+        var num_end = sep_end;
+        if (sep_end == rest.len) {
+            if (std.mem.lastIndexOf(u8, rest, ".html")) |html_pos| {
+                num_end = html_pos;
+            }
+        }
+        
+        if (num_end == 0) {
+            if (verbose and href_count <= 20) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: empty number after /c: {s}\n", .{ href_count, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        }
         const number_str = rest[0..num_end];
 
         // Validate it looks like a number (digits and optional one dot)
-        if (!looksLikeNumber(number_str)) continue;
+        if (!looksLikeNumber(number_str)) {
+            if (verbose and href_count <= 20) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: invalid number format '{s}': {s}\n", .{ href_count, number_str, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        }
 
         // Build absolute URL — append "1.html" only when the href doesn't already end with ".html"
         const abs_url = if (std.mem.startsWith(u8, href, "http://") or
@@ -123,6 +192,129 @@ pub fn parseChapterList(
             }
         }
         if (found) {
+            if (verbose and href_count <= 20) {
+                var err_buf: [256]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: duplicate chapter {s}\n", .{ href_count, number_copy }) catch {};
+                efw.interface.flush() catch {};
+            }
+            allocator.free(abs_url);
+            allocator.free(number_copy);
+            continue;
+        }
+
+        if (verbose and href_count <= 20) {
+            var err_buf: [256]u8 = undefined;
+            var efw = std.fs.File.stderr().writer(&err_buf);
+            efw.interface.print("  href #{d}: MATCHED chapter {s}\n", .{ href_count, number_copy }) catch {};
+            efw.interface.flush() catch {};
+        }
+
+        try chapters.append(allocator, MangafoxChapter{
+            .number = number_copy,
+            .url = abs_url,
+        });
+    }
+
+    if (verbose) {
+        var err_buf: [256]u8 = undefined;
+        var efw = std.fs.File.stderr().writer(&err_buf);
+        efw.interface.print("[parseChapterList] Total hrefs examined: {d}, chapters found: {d}\n", .{ href_count, chapters.items.len }) catch {};
+        efw.interface.flush() catch {};
+    }
+
+    return chapters.toOwnedSlice(allocator);
+}
+
+/// Parse the chapter list from a fanfox.net RSS feed.
+/// The RSS format has <link>URL</link> elements for each chapter.
+/// Returns an owned slice; caller frees each item's fields and the slice itself.
+/// If verbose is true, logs parsing diagnostics to stderr.
+pub fn parseChapterListFromRss(
+    allocator: std.mem.Allocator,
+    xml: []const u8,
+    slug: []const u8,
+    verbose: bool,
+) ![]MangafoxChapter {
+    var chapters: std.ArrayListUnmanaged(MangafoxChapter) = .empty;
+    errdefer {
+        for (chapters.items) |ch| {
+            allocator.free(ch.number);
+            allocator.free(ch.url);
+        }
+        chapters.deinit(allocator);
+    }
+
+    // Build the path prefix we're searching for: /manga/{slug}/
+    var prefix_buf: [512]u8 = undefined;
+    const prefix = std.fmt.bufPrint(&prefix_buf, "/manga/{s}/", .{slug}) catch |e| {
+        if (e == error.NoSpaceLeft) return error.SlugTooLong;
+        return e;
+    };
+
+    if (verbose) {
+        var err_buf: [256]u8 = undefined;
+        var efw = std.fs.File.stderr().writer(&err_buf);
+        efw.interface.print("[parseChapterListFromRss] Searching for pattern: {s}\n", .{prefix}) catch {};
+        efw.interface.flush() catch {};
+    }
+
+    var pos: usize = 0;
+    var link_count: usize = 0;
+    while (pos < xml.len) {
+        // Find next <link> tag
+        const link_open = std.mem.indexOfPos(u8, xml, pos, "<link>") orelse break;
+        const val_start = link_open + "<link>".len;
+        const link_close = std.mem.indexOfPos(u8, xml, val_start, "</link>") orelse break;
+        const link_url = xml[val_start..link_close];
+        pos = link_close + "</link>".len;
+        link_count += 1;
+
+        // Must contain our prefix
+        if (std.mem.indexOf(u8, link_url, prefix) == null) continue;
+
+        // Extract chapter number: look for /c{digit} pattern
+        const c_needle = "/c";
+        const c_pos = std.mem.indexOf(u8, link_url, c_needle) orelse continue;
+        const after_c_pos = c_pos + c_needle.len;
+        if (after_c_pos >= link_url.len or link_url[after_c_pos] < '0' or link_url[after_c_pos] > '9') continue;
+
+        const num_start = after_c_pos;
+        const rest = link_url[num_start..];
+
+        // Find end of chapter number (slash, question, hash, or .html)
+        const sep_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
+        var num_end = sep_end;
+        if (sep_end == rest.len) {
+            if (std.mem.lastIndexOf(u8, rest, ".html")) |html_pos| {
+                num_end = html_pos;
+            }
+        }
+        if (num_end == 0) continue;
+        const number_str = rest[0..num_end];
+
+        if (!looksLikeNumber(number_str)) continue;
+
+        // Use the URL as-is if absolute; the RSS always provides absolute URLs
+        const abs_url = if (std.mem.startsWith(u8, link_url, "http://") or
+            std.mem.startsWith(u8, link_url, "https://"))
+            try allocator.dupe(u8, link_url)
+        else
+            try std.fmt.allocPrint(allocator, "https://fanfox.net{s}", .{link_url});
+        errdefer allocator.free(abs_url);
+
+        const number_copy = try allocator.dupe(u8, number_str);
+        errdefer allocator.free(number_copy);
+
+        // Deduplicate by chapter number
+        var found = false;
+        for (chapters.items) |existing| {
+            if (std.mem.eql(u8, existing.number, number_copy)) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
             allocator.free(abs_url);
             allocator.free(number_copy);
             continue;
@@ -132,6 +324,13 @@ pub fn parseChapterList(
             .number = number_copy,
             .url = abs_url,
         });
+    }
+
+    if (verbose) {
+        var err_buf: [256]u8 = undefined;
+        var efw = std.fs.File.stderr().writer(&err_buf);
+        efw.interface.print("[parseChapterListFromRss] Total links examined: {d}, chapters found: {d}\n", .{ link_count, chapters.items.len }) catch {};
+        efw.interface.flush() catch {};
     }
 
     return chapters.toOwnedSlice(allocator);
@@ -160,6 +359,33 @@ pub fn filterChapters(
     }
 
     return result.toOwnedSlice(allocator);
+}
+
+/// Sort chapters numerically by chapter number.
+/// Handles both integer and decimal chapter numbers (e.g., 1, 5.5, 10, 100.1).
+/// Returns a new slice with chapters sorted in ascending numeric order.
+/// Caller must free the returned slice (but not the individual chapter fields).
+pub fn sortChapters(
+    allocator: std.mem.Allocator,
+    chapters: []const MangafoxChapter,
+) ![]MangafoxChapter {
+    if (chapters.len == 0) return try allocator.alloc(MangafoxChapter, 0);
+
+    // Create a mutable copy for sorting
+    const sorted = try allocator.dupe(MangafoxChapter, chapters);
+    errdefer allocator.free(sorted);
+
+    // Sort using numeric comparison of chapter numbers
+    const Context = struct {
+        pub fn lessThan(_: @This(), a: MangafoxChapter, b: MangafoxChapter) bool {
+            const a_num = std.fmt.parseFloat(f32, a.number) catch return false;
+            const b_num = std.fmt.parseFloat(f32, b.number) catch return true;
+            return a_num < b_num;
+        }
+    };
+
+    std.mem.sort(MangafoxChapter, sorted, Context{}, Context.lessThan);
+    return sorted;
 }
 
 /// Scan HTML page for a total page count embedded in script content.
@@ -395,28 +621,57 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         .user_agent = user_agent,
     };
 
-    // 1. Fetch manga index page
+    // 1. Try RSS feed first — bypasses JavaScript-rendered chapter lists
+    const rss_url = try std.fmt.allocPrint(allocator, "https://fanfox.net/rss/{s}.xml", .{slug});
+    defer allocator.free(rss_url);
+
     if (opts.verbose) {
-        try w.print("Fetching chapter list from {s}\n", .{url});
+        try w.print("Fetching chapter list via RSS: {s}\n", .{rss_url});
         try w.flush();
     }
 
-    var index_resp = http_mod.fetch(&client, allocator, url, fetch_opts) catch |err| {
-        printErr("Failed to fetch manga page: {s}", .{@errorName(err)});
-        return 1;
-    };
-    defer index_resp.deinit();
+    var rss_chapters: []MangafoxChapter = &.{};
+    if (http_mod.fetch(&client, allocator, rss_url, fetch_opts)) |rss_resp_val| {
+        var rss_resp = rss_resp_val;
+        defer rss_resp.deinit();
+        if (rss_resp.isSuccess()) {
+            rss_chapters = parseChapterListFromRss(allocator, rss_resp.body, slug, opts.verbose) catch &.{};
+        }
+    } else |_| {}
 
-    if (!index_resp.isSuccess()) {
-        printErr("Manga page returned HTTP {d}", .{index_resp.status});
-        return 1;
+    // 2. Fall back to HTML parsing if RSS returned nothing
+    var html_chapters: []MangafoxChapter = &.{};
+    var index_resp_opt: ?http_mod.Response = null;
+    defer if (index_resp_opt) |*r| r.deinit();
+
+    if (rss_chapters.len == 0) {
+        if (opts.verbose) {
+            try w.print("RSS empty or unavailable, falling back to HTML parsing.\n", .{});
+            try w.print("Fetching chapter list from {s}\n", .{url});
+            try w.flush();
+        }
+
+        var index_resp = http_mod.fetch(&client, allocator, url, fetch_opts) catch |err| {
+            printErr("Failed to fetch manga page: {s}", .{@errorName(err)});
+            return 1;
+        };
+        index_resp_opt = index_resp;
+
+        if (!index_resp.isSuccess()) {
+            printErr("Manga page returned HTTP {d}", .{index_resp.status});
+            return 1;
+        }
+
+        html_chapters = parseChapterList(allocator, index_resp.body, slug, url, opts.verbose) catch |err| {
+            printErr("Failed to parse chapter list: {s}", .{@errorName(err)});
+            return 1;
+        };
+    } else if (opts.verbose) {
+        try w.print("RSS: found {d} chapter(s).\n", .{rss_chapters.len});
+        try w.flush();
     }
 
-    // 2. Parse chapter list
-    const all_chapters = parseChapterList(allocator, index_resp.body, slug, url) catch |err| {
-        printErr("Failed to parse chapter list: {s}", .{@errorName(err)});
-        return 1;
-    };
+    const all_chapters = if (rss_chapters.len > 0) rss_chapters else html_chapters;
     defer {
         for (all_chapters) |ch| {
             allocator.free(ch.number);
@@ -435,13 +690,25 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     try w.flush();
 
     // 3. Filter by chapter range
-    const chapters = try filterChapters(allocator, all_chapters, opts.chapters_from, opts.chapters_to);
-    defer allocator.free(chapters); // elements are borrowed from all_chapters
+    const filtered = try filterChapters(allocator, all_chapters, opts.chapters_from, opts.chapters_to);
+    defer allocator.free(filtered); // elements are borrowed from all_chapters
 
-    if (chapters.len == 0) {
+    if (filtered.len == 0) {
         try w.print("No chapters match the specified range.\n", .{});
         try w.flush();
         return 0;
+    }
+
+    // 4. Sort chapters numerically (handles both integers and decimals like 5.5, 100.1)
+    const chapters = try sortChapters(allocator, filtered);
+    defer allocator.free(chapters); // sorted slice, elements still borrowed from all_chapters
+
+    if (opts.verbose) {
+        try w.print("Chapter order after sorting:\n", .{});
+        for (chapters) |ch| {
+            try w.print("  {s}\n", .{ch.number});
+        }
+        try w.flush();
     }
 
     try w.print("Downloading {d} chapter(s).\n\n", .{chapters.len});
@@ -922,7 +1189,7 @@ test "parseChapterList" {
         \\  <li><a href="/manga/naruto/c5.5/1.html">Chapter 5.5</a></li>
         \\</ul>
     ;
-    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net");
+    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net", false);
     defer {
         for (chapters) |ch| {
             std.testing.allocator.free(ch.number);
@@ -936,6 +1203,92 @@ test "parseChapterList" {
     try std.testing.expectEqualStrings("699", chapters[1].number);
     try std.testing.expectEqualStrings("https://fanfox.net/manga/naruto/c699/1.html", chapters[1].url);
     try std.testing.expectEqualStrings("5.5", chapters[2].number);
+}
+
+test "parseChapterListFromRss basic" {
+    const xml =
+        \\<?xml version="1.0" encoding="utf-8"?>
+        \\<rss version="2.0"><channel>
+        \\<link>https://fanfox.net/</link>
+        \\<item><title>Naruto Ch.700</title><link>https://fanfox.net/manga/naruto/c700/1.html</link></item>
+        \\<item><title>Naruto Ch.699</title><link>https://fanfox.net/manga/naruto/c699/1.html</link></item>
+        \\<item><title>Naruto Ch.5.5</title><link>https://fanfox.net/manga/naruto/c5.5/1.html</link></item>
+        \\</channel></rss>
+    ;
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    defer {
+        for (chapters) |ch| {
+            std.testing.allocator.free(ch.number);
+            std.testing.allocator.free(ch.url);
+        }
+        std.testing.allocator.free(chapters);
+    }
+    try std.testing.expect(chapters.len == 3);
+    try std.testing.expectEqualStrings("700", chapters[0].number);
+    try std.testing.expectEqualStrings("https://fanfox.net/manga/naruto/c700/1.html", chapters[0].url);
+    try std.testing.expectEqualStrings("699", chapters[1].number);
+    try std.testing.expectEqualStrings("5.5", chapters[2].number);
+}
+
+test "parseChapterListFromRss filters non-chapter links" {
+    // Channel-level <link> and image <link> should not appear in results
+    const xml =
+        \\<rss><channel>
+        \\<link>https://fanfox.net/</link>
+        \\<image><link>https://fanfox.net/</link></image>
+        \\<item><title>Seventh Ch.001</title><link>https://fanfox.net/manga/seventh/c001/1.html</link></item>
+        \\<item><title>Seventh Ch.002</title><link>https://fanfox.net/manga/seventh/c002/1.html</link></item>
+        \\</channel></rss>
+    ;
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "seventh", false);
+    defer {
+        for (chapters) |ch| {
+            std.testing.allocator.free(ch.number);
+            std.testing.allocator.free(ch.url);
+        }
+        std.testing.allocator.free(chapters);
+    }
+    try std.testing.expect(chapters.len == 2);
+    try std.testing.expectEqualStrings("001", chapters[0].number);
+    try std.testing.expectEqualStrings("002", chapters[1].number);
+}
+
+test "parseChapterListFromRss deduplicates" {
+    const xml =
+        \\<rss><channel>
+        \\<item><link>https://fanfox.net/manga/naruto/c100/1.html</link></item>
+        \\<item><link>https://fanfox.net/manga/naruto/c100/1.html</link></item>
+        \\<item><link>https://fanfox.net/manga/naruto/c101/1.html</link></item>
+        \\</channel></rss>
+    ;
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    defer {
+        for (chapters) |ch| {
+            std.testing.allocator.free(ch.number);
+            std.testing.allocator.free(ch.url);
+        }
+        std.testing.allocator.free(chapters);
+    }
+    try std.testing.expect(chapters.len == 2);
+}
+
+test "parseChapterListFromRss empty feed" {
+    const xml = "<?xml version=\"1.0\"?><rss><channel></channel></rss>";
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    defer std.testing.allocator.free(chapters);
+    try std.testing.expect(chapters.len == 0);
+}
+
+test "parseChapterListFromRss wrong slug filtered" {
+    // Links for a different manga should not match
+    const xml =
+        \\<rss><channel>
+        \\<item><link>https://fanfox.net/manga/bleach/c700/1.html</link></item>
+        \\</channel></rss>
+    ;
+    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    defer std.testing.allocator.free(chapters);
+    try std.testing.expect(chapters.len == 0);
 }
 
 test "filterChapters range" {
@@ -964,6 +1317,89 @@ test "filterChapters no range" {
     const filtered = try filterChapters(allocator, &chapters, null, null);
     defer allocator.free(filtered);
     try std.testing.expect(filtered.len == 2);
+}
+
+test "sortChapters numeric order" {
+    const allocator = std.testing.allocator;
+    const chapters = [_]MangafoxChapter{
+        .{ .number = "10", .url = "u10" },
+        .{ .number = "1", .url = "u1" },
+        .{ .number = "2", .url = "u2" },
+        .{ .number = "100", .url = "u100" },
+        .{ .number = "5", .url = "u5" },
+    };
+    const sorted = try sortChapters(allocator, &chapters);
+    defer allocator.free(sorted);
+    try std.testing.expect(sorted.len == 5);
+    try std.testing.expectEqualStrings("1", sorted[0].number);
+    try std.testing.expectEqualStrings("2", sorted[1].number);
+    try std.testing.expectEqualStrings("5", sorted[2].number);
+    try std.testing.expectEqualStrings("10", sorted[3].number);
+    try std.testing.expectEqualStrings("100", sorted[4].number);
+}
+
+test "sortChapters with decimals" {
+    const allocator = std.testing.allocator;
+    const chapters = [_]MangafoxChapter{
+        .{ .number = "5", .url = "u5" },
+        .{ .number = "5.5", .url = "u5.5" },
+        .{ .number = "6", .url = "u6" },
+        .{ .number = "5.1", .url = "u5.1" },
+        .{ .number = "1", .url = "u1" },
+    };
+    const sorted = try sortChapters(allocator, &chapters);
+    defer allocator.free(sorted);
+    try std.testing.expect(sorted.len == 5);
+    try std.testing.expectEqualStrings("1", sorted[0].number);
+    try std.testing.expectEqualStrings("5", sorted[1].number);
+    try std.testing.expectEqualStrings("5.1", sorted[2].number);
+    try std.testing.expectEqualStrings("5.5", sorted[3].number);
+    try std.testing.expectEqualStrings("6", sorted[4].number);
+}
+
+test "sortChapters already sorted" {
+    const allocator = std.testing.allocator;
+    const chapters = [_]MangafoxChapter{
+        .{ .number = "1", .url = "u1" },
+        .{ .number = "2", .url = "u2" },
+        .{ .number = "3", .url = "u3" },
+    };
+    const sorted = try sortChapters(allocator, &chapters);
+    defer allocator.free(sorted);
+    try std.testing.expect(sorted.len == 3);
+    try std.testing.expectEqualStrings("1", sorted[0].number);
+    try std.testing.expectEqualStrings("2", sorted[1].number);
+    try std.testing.expectEqualStrings("3", sorted[2].number);
+}
+
+test "sortChapters empty" {
+    const allocator = std.testing.allocator;
+    const chapters = [_]MangafoxChapter{};
+    const sorted = try sortChapters(allocator, &chapters);
+    defer allocator.free(sorted);
+    try std.testing.expect(sorted.len == 0);
+}
+
+test "parseChapterList without trailing slash" {
+    const html =
+        \\<ul>
+        \\  <li><a href="/manga/naruto/c100.html">Chapter 100</a></li>
+        \\  <li><a href="/manga/naruto/c99.html">Chapter 99</a></li>
+        \\  <li><a href="/manga/naruto/c10.5.html">Chapter 10.5</a></li>
+        \\</ul>
+    ;
+    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net", false);
+    defer {
+        for (chapters) |ch| {
+            std.testing.allocator.free(ch.number);
+            std.testing.allocator.free(ch.url);
+        }
+        std.testing.allocator.free(chapters);
+    }
+    try std.testing.expect(chapters.len == 3);
+    try std.testing.expectEqualStrings("100", chapters[0].number);
+    try std.testing.expectEqualStrings("99", chapters[1].number);
+    try std.testing.expectEqualStrings("10.5", chapters[2].number);
 }
 
 test "parsePageCount var pcount" {
