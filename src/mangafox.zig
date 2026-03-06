@@ -36,11 +36,13 @@ pub fn isValidSlug(slug: []const u8) bool {
 /// Parse the chapter list HTML for a given manga slug.
 /// Looks for anchor hrefs matching /manga/{slug}/[v.../]c{number}/
 /// Returns an owned slice; caller frees each item's fields and the slice itself.
+/// If verbose is true, logs all examined hrefs and rejection reasons to stderr for debugging.
 pub fn parseChapterList(
     allocator: std.mem.Allocator,
     html: []const u8,
     slug: []const u8,
     base_url: []const u8,
+    verbose: bool,
 ) ![]MangafoxChapter {
     var chapters: std.ArrayListUnmanaged(MangafoxChapter) = .empty;
     errdefer {
@@ -58,7 +60,15 @@ pub fn parseChapterList(
         return e;
     };
 
+    if (verbose) {
+        var err_buf: [256]u8 = undefined;
+        var efw = std.fs.File.stderr().writer(&err_buf);
+        efw.interface.print("[parseChapterList] Searching for pattern: {s}\n", .{prefix}) catch {};
+        efw.interface.flush() catch {};
+    }
+
     var pos: usize = 0;
+    var href_count: usize = 0;
     while (pos < html.len) {
         // Find next href=" or href='
         const href_start = blk: {
@@ -81,14 +91,31 @@ pub fn parseChapterList(
         };
         const href = html[val_start..val_end];
         pos = val_end + 1;
+        href_count += 1;
 
         // Must contain our prefix
-        if (std.mem.indexOf(u8, href, prefix) == null) continue;
+        if (std.mem.indexOf(u8, href, prefix) == null) {
+            if (verbose and href_count <= 10) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: no prefix match: {s}\n", .{ href_count, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        }
 
         // Extract chapter number: look for /c{number} pattern
         // Accept both /c{N}/ and /c{N}.html formats (with or without trailing slash)
         const c_needle = "/c";
-        const c_pos = std.mem.indexOf(u8, href, c_needle) orelse continue;
+        const c_pos = std.mem.indexOf(u8, href, c_needle) orelse {
+            if (verbose and href_count <= 10) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: no /c pattern: {s}\n", .{ href_count, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        };
         const num_start = c_pos + c_needle.len;
         const rest = href[num_start..];
         
@@ -104,11 +131,27 @@ pub fn parseChapterList(
             }
         }
         
-        if (num_end == 0) continue;
+        if (num_end == 0) {
+            if (verbose and href_count <= 10) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: empty number after /c: {s}\n", .{ href_count, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        }
         const number_str = rest[0..num_end];
 
         // Validate it looks like a number (digits and optional one dot)
-        if (!looksLikeNumber(number_str)) continue;
+        if (!looksLikeNumber(number_str)) {
+            if (verbose and href_count <= 10) {
+                var err_buf: [512]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: invalid number format '{s}': {s}\n", .{ href_count, number_str, href }) catch {};
+                efw.interface.flush() catch {};
+            }
+            continue;
+        }
 
         // Build absolute URL — append "1.html" only when the href doesn't already end with ".html"
         const abs_url = if (std.mem.startsWith(u8, href, "http://") or
@@ -136,15 +179,35 @@ pub fn parseChapterList(
             }
         }
         if (found) {
+            if (verbose and href_count <= 10) {
+                var err_buf: [256]u8 = undefined;
+                var efw = std.fs.File.stderr().writer(&err_buf);
+                efw.interface.print("  href #{d}: duplicate chapter {s}\n", .{ href_count, number_copy }) catch {};
+                efw.interface.flush() catch {};
+            }
             allocator.free(abs_url);
             allocator.free(number_copy);
             continue;
+        }
+
+        if (verbose and href_count <= 10) {
+            var err_buf: [256]u8 = undefined;
+            var efw = std.fs.File.stderr().writer(&err_buf);
+            efw.interface.print("  href #{d}: MATCHED chapter {s}\n", .{ href_count, number_copy }) catch {};
+            efw.interface.flush() catch {};
         }
 
         try chapters.append(allocator, MangafoxChapter{
             .number = number_copy,
             .url = abs_url,
         });
+    }
+
+    if (verbose) {
+        var err_buf: [256]u8 = undefined;
+        var efw = std.fs.File.stderr().writer(&err_buf);
+        efw.interface.print("[parseChapterList] Total hrefs examined: {d}, chapters found: {d}\n", .{ href_count, chapters.items.len }) catch {};
+        efw.interface.flush() catch {};
     }
 
     return chapters.toOwnedSlice(allocator);
@@ -453,7 +516,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     }
 
     // 2. Parse chapter list
-    const all_chapters = parseChapterList(allocator, index_resp.body, slug, url) catch |err| {
+    const all_chapters = parseChapterList(allocator, index_resp.body, slug, url, opts.verbose) catch |err| {
         printErr("Failed to parse chapter list: {s}", .{@errorName(err)});
         return 1;
     };
@@ -974,7 +1037,7 @@ test "parseChapterList" {
         \\  <li><a href="/manga/naruto/c5.5/1.html">Chapter 5.5</a></li>
         \\</ul>
     ;
-    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net");
+    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net", false);
     defer {
         for (chapters) |ch| {
             std.testing.allocator.free(ch.number);
@@ -1087,7 +1150,7 @@ test "parseChapterList without trailing slash" {
         \\  <li><a href="/manga/naruto/c10.5.html">Chapter 10.5</a></li>
         \\</ul>
     ;
-    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net");
+    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net", false);
     defer {
         for (chapters) |ch| {
             std.testing.allocator.free(ch.number);
