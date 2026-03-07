@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>argiope in CI/CD</title>
+    <meta name="description" content="Use argiope in GitHub Actions for broken-link checking, HTML reports, and uploaded artifacts.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕷️</text></svg>">
+</head>
+<body data-page="cicd">
+    <div class="site-shell">
+        <nav class="navbar">
+            <div class="container nav-container">
+                <a class="nav-brand" href="index.html"><span class="brand-mark">🕷</span><span class="brand-copy"><strong>argiope</strong><span>CI/CD guide</span></span></a>
+                <div class="nav-actions">
+                    <ul class="nav-menu">
+                        <li><a class="nav-link" href="index.html" data-page="index.html">Home</a></li>
+                        <li><a class="nav-link" href="install.html" data-page="install.html">Installation</a></li>
+                        <li><a class="nav-link" href="guide.html" data-page="guide.html">Guide</a></li>
+                        <li><a class="nav-link" href="reference.html" data-page="reference.html">Reference</a></li>
+                        <li><a class="nav-link" href="cicd.html" data-page="cicd.html">CI/CD</a></li>
+                        <li><a class="nav-link external" href="https://github.com/christianhelle/argiope">GitHub</a></li>
+                    </ul>
+                    <button class="theme-toggle" type="button" aria-label="Toggle theme">☾</button>
+                    <button class="hamburger" type="button" aria-label="Toggle navigation"><span></span><span></span><span></span></button>
+                </div>
+            </div>
+        </nav>
+
+        <main class="section">
+            <div class="container doc-header">
+                <span class="eyebrow">Automation</span>
+                <h1>Turn crawl results into CI artifacts.</h1>
+                <p>argiope works well in pipelines because report mode writes directly to disk. That keeps workflow logs quiet and gives you a portable file to upload, publish, or inspect later.</p>
+            </div>
+
+            <div class="container doc-layout">
+                <aside class="toc">
+                    <h4>On this page</h4>
+                    <ul>
+                        <li><a href="#why">Why it fits CI</a></li>
+                        <li><a href="#html">HTML report workflow</a></li>
+                        <li><a href="#markdown">Markdown report workflow</a></li>
+                        <li><a href="#ideas">Common patterns</a></li>
+                    </ul>
+                </aside>
+
+                <div class="doc-shell">
+                    <section class="doc-section" id="why">
+                        <h2>Why argiope fits CI/CD</h2>
+                        <div class="steps-grid">
+                            <div class="step-card"><strong>Single binary</strong><p>No runtime environment or service stack is needed once the executable is present.</p></div>
+                            <div class="step-card"><strong>Report-first mode</strong><p>`--report` produces an explicit file artifact instead of forcing you to scrape workflow logs.</p></div>
+                            <div class="step-card"><strong>Readable output formats</strong><p>HTML works for reviewers, Markdown works for GitHub-native text surfaces.</p></div>
+                        </div>
+                    </section>
+
+                    <section class="doc-section" id="html">
+                        <h2>GitHub Actions example with HTML artifacts</h2>
+                        <p>This pattern downloads the current release, runs a crawl, writes a self-contained HTML report, and uploads that report as a workflow artifact.</p>
+                        <div class="code-block"><pre><code>name: Broken Link Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download argiope
+        run: |
+          curl -fsSL https://christianhelle.github.io/argiope/install | sh
+
+      - name: Run crawl
+        run: |
+          argiope check https://example.com \
+            --report report.html \
+            --report-format html
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: broken-link-report
+          path: report.html</code></pre></div>
+                    </section>
+
+                    <section class="doc-section" id="markdown">
+                        <h2>Markdown report for GitHub-native summaries</h2>
+                        <p>Markdown reports are easier to paste into issue descriptions, release notes, or workflow summaries.</p>
+                        <div class="code-block"><pre><code>argiope check https://example.com \
+  --report report.md \
+  --report-format markdown \
+  --include-positives</code></pre></div>
+                        <div class="callout"><strong>Tip:</strong> pair Markdown output with the GitHub Actions job summary feature if you want the crawl result visible directly in the run UI.</div>
+                    </section>
+
+                    <section class="doc-section" id="ideas">
+                        <h2>Common automation patterns</h2>
+                        <div class="param-grid">
+                            <div class="param-item"><strong>Scheduled link checks</strong><p>Run `check` nightly or weekly and keep the HTML artifact for historical comparison.</p></div>
+                            <div class="param-item"><strong>Release gate</strong><p>Crawl your docs or landing pages before shipping a tagged release.</p></div>
+                            <div class="param-item"><strong>Archive generation</strong><p>Use `images` in a manual workflow to create downloadable offline collections as build artifacts.</p></div>
+                            <div class="param-item"><strong>Static browser refresh</strong><p>Use `library` when the files already exist and only the HTML layer needs to be rebuilt.</p></div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <button class="toc-toggle" type="button" aria-label="Toggle table of contents">≡</button>
+        </main>
+
+        <footer class="footer">
+            <div class="container"><div class="footer-panel"><div class="footer-grid"><div class="footer-column"><h4>argiope</h4><p>Small command surface, useful workflow artifacts.</p></div><div class="footer-column"><h4>Docs</h4><ul><li><a href="guide.html">Guide</a></li><li><a href="reference.html">Reference</a></li></ul></div><div class="footer-column"><h4>Install</h4><ul><li><a href="install.html">Installation</a></li><li><a href="install-scripts.html">Install scripts</a></li></ul></div><div class="footer-column"><h4>GitHub</h4><ul><li><a href="https://github.com/christianhelle/argiope/actions">Actions</a></li><li><a href="https://github.com/christianhelle/argiope/releases">Releases</a></li></ul></div></div><div class="footer-bottom">MIT licensed. Built for GitHub Pages.</div></div></div>
+        </footer>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

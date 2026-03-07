@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Install argiope</title>
+    <meta name="description" content="Install argiope with hosted shell scripts, PowerShell, Snap, GitHub Releases, or from source.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕷️</text></svg>">
+</head>
+<body data-page="install">
+    <div class="site-shell">
+        <nav class="navbar">
+            <div class="container nav-container">
+                <a class="nav-brand" href="index.html">
+                    <span class="brand-mark">🕷</span>
+                    <span class="brand-copy"><strong>argiope</strong><span>Installation</span></span>
+                </a>
+                <div class="nav-actions">
+                    <ul class="nav-menu">
+                        <li><a class="nav-link" href="index.html" data-page="index.html">Home</a></li>
+                        <li><a class="nav-link" href="install.html" data-page="install.html">Installation</a></li>
+                        <li><a class="nav-link" href="guide.html" data-page="guide.html">Guide</a></li>
+                        <li><a class="nav-link" href="reference.html" data-page="reference.html">Reference</a></li>
+                        <li><a class="nav-link" href="cicd.html" data-page="cicd.html">CI/CD</a></li>
+                        <li><a class="nav-link external" href="https://github.com/christianhelle/argiope">GitHub</a></li>
+                    </ul>
+                    <button class="theme-toggle" type="button" aria-label="Toggle theme">☾</button>
+                    <button class="hamburger" type="button" aria-label="Toggle navigation"><span></span><span></span><span></span></button>
+                </div>
+            </div>
+        </nav>
+
+        <main>
+            <section class="page-hero">
+                <div class="container">
+                    <span class="eyebrow">Install argiope</span>
+                    <h1>Pick the quickest route to a working binary.</h1>
+                    <p>The website publishes the repository install scripts directly, while releases keep the cross-platform archives ready for manual setup.</p>
+                    <div class="hero-meta">
+                        <span class="mini-pill">GitHub Pages script hosting</span>
+                        <span class="mini-pill">Snap package</span>
+                        <span class="mini-pill">Source build with Zig 0.15.2+</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="container install-grid">
+                    <article class="command-card install-card featured">
+                        <div class="button-row">
+                            <span class="badge brand">Recommended</span>
+                            <span class="badge">Latest GitHub release</span>
+                        </div>
+                        <h3>Hosted install scripts</h3>
+                        <p>These are the same repo-root scripts copied into the Pages deployment artifact.</p>
+                        <div class="install-grid">
+                            <div>
+                                <strong>Linux / macOS</strong>
+                                <div class="install-code"><pre><code>curl -fsSL https://christianhelle.github.io/argiope/install | sh</code></pre></div>
+                                <p class="muted">The script installs to `/usr/local/bin` by default. Override with `INSTALL_DIR=/path` if you want a different location.</p>
+                            </div>
+                            <div>
+                                <strong>Windows</strong>
+                                <div class="install-code"><pre><code>irm https://christianhelle.github.io/argiope/install.ps1 | iex</code></pre></div>
+                                <p class="muted">The PowerShell installer writes to `%USERPROFILE%\.local\bin` and adds that folder to the user PATH when needed.</p>
+                            </div>
+                        </div>
+                        <div class="callout success"><strong>Direct downloads:</strong> You can also fetch <a href="install">`/install`</a> or <a href="install.ps1">`/install.ps1`</a> directly from the Pages site.</div>
+                    </article>
+
+                    <article class="command-card">
+                        <div class="icon">📦</div>
+                        <h3>Snap</h3>
+                        <div class="install-code"><pre><code>sudo snap install argiope</code></pre></div>
+                        <p>Best fit when you want a fast Linux install without managing the release archive yourself.</p>
+                    </article>
+
+                    <article class="command-card">
+                        <div class="icon">🗂️</div>
+                        <h3>Release archives</h3>
+                        <div class="install-code"><pre><code>https://github.com/christianhelle/argiope/releases/latest</code></pre></div>
+                        <p>Published builds cover Linux x86_64, Linux aarch64, macOS x86_64, macOS aarch64, and Windows x86_64.</p>
+                    </article>
+
+                    <article class="command-card">
+                        <div class="icon">🧱</div>
+                        <h3>Source build</h3>
+                        <div class="install-code"><pre><code>git clone https://github.com/christianhelle/argiope.git
+cd argiope
+zig build -Doptimize=ReleaseFast</code></pre></div>
+                        <p>The optimized binary ends up at `zig-out/bin/argiope`.</p>
+                    </article>
+
+                    <article class="command-card">
+                        <div class="icon">🔧</div>
+                        <h3>Makefile install</h3>
+                        <div class="install-code"><pre><code>make install INSTALL_DIR=~/.local/bin</code></pre></div>
+                        <p>Convenient when you are already building locally and want a user-scoped install path.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="container">
+                    <h2 class="section-heading">Verify the install</h2>
+                    <div class="example-grid">
+                        <article>
+                            <h3>Check the version</h3>
+                            <div class="code-block"><pre><code>argiope --version</code></pre></div>
+                            <p>If the command resolves, the shell can already find the installed binary.</p>
+                        </article>
+                        <article>
+                            <h3>Run a smoke test</h3>
+                            <div class="code-block"><pre><code>argiope check https://example.com --depth 1</code></pre></div>
+                            <p>A small crawl is enough to verify networking, output formatting, and general installation health.</p>
+                        </article>
+                    </div>
+                    <div class="callout warning">
+                        <strong>PATH issues:</strong> if `argiope` is not found after install, open a new terminal session first. On Windows, the PowerShell script updates the user PATH but existing terminals do not reload it automatically.
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="container">
+                    <h2 class="section-heading">What each script does</h2>
+                    <div class="param-grid">
+                        <div class="param-item">
+                            <strong>`install.sh`</strong>
+                            <p>Detects Linux vs macOS, maps CPU architecture to the matching release asset, downloads the `.tar.gz`, and installs `argiope` with executable permissions.</p>
+                        </div>
+                        <div class="param-item">
+                            <strong>`install.ps1`</strong>
+                            <p>Fetches the latest release metadata through the GitHub API, downloads the Windows zip, expands `argiope.exe`, and updates the user PATH if needed.</p>
+                        </div>
+                        <div class="param-item">
+                            <strong>Pages endpoints</strong>
+                            <p>The workflow copies the repo-root scripts into the deployed site so the install URLs stay short and predictable.</p>
+                        </div>
+                    </div>
+                    <ul class="page-list">
+                        <li><a class="link-card" href="install-scripts.html"><h3>Install script landing page</h3><p>Small reference page with the hosted script URLs and download links.</p></a></li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <div class="container"><div class="footer-panel"><div class="footer-grid"><div class="footer-column"><h4>argiope</h4><p>Single-binary crawler and image archiver.</p></div><div class="footer-column"><h4>Docs</h4><ul><li><a href="guide.html">Guide</a></li><li><a href="reference.html">Reference</a></li><li><a href="cicd.html">CI/CD</a></li></ul></div><div class="footer-column"><h4>Install</h4><ul><li><a href="install">install</a></li><li><a href="install.ps1">install.ps1</a></li></ul></div><div class="footer-column"><h4>GitHub</h4><ul><li><a href="https://github.com/christianhelle/argiope/releases">Releases</a></li><li><a href="https://github.com/christianhelle/argiope/issues">Issues</a></li></ul></div></div><div class="footer-bottom">MIT licensed. Built for GitHub Pages.</div></div></div>
+        </footer>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

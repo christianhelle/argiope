@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>argiope guide</title>
+    <meta name="description" content="Walk through argiope workflows for broken-link detection, image archiving, offline browsing, reports, and MangaFox chapter downloads.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕷️</text></svg>">
+</head>
+<body data-page="guide">
+    <div class="site-shell">
+        <nav class="navbar">
+            <div class="container nav-container">
+                <a class="nav-brand" href="index.html"><span class="brand-mark">🕷</span><span class="brand-copy"><strong>argiope</strong><span>User guide</span></span></a>
+                <div class="nav-actions">
+                    <ul class="nav-menu">
+                        <li><a class="nav-link" href="index.html" data-page="index.html">Home</a></li>
+                        <li><a class="nav-link" href="install.html" data-page="install.html">Installation</a></li>
+                        <li><a class="nav-link" href="guide.html" data-page="guide.html">Guide</a></li>
+                        <li><a class="nav-link" href="reference.html" data-page="reference.html">Reference</a></li>
+                        <li><a class="nav-link" href="cicd.html" data-page="cicd.html">CI/CD</a></li>
+                        <li><a class="nav-link external" href="https://github.com/christianhelle/argiope">GitHub</a></li>
+                    </ul>
+                    <button class="theme-toggle" type="button" aria-label="Toggle theme">☾</button>
+                    <button class="hamburger" type="button" aria-label="Toggle navigation"><span></span><span></span><span></span></button>
+                </div>
+            </div>
+        </nav>
+
+        <main class="section">
+            <div class="container doc-header">
+                <span class="eyebrow">Usage guide</span>
+                <h1>From first crawl to portable offline library.</h1>
+                <p>argiope has a small command surface, but each command covers a different workflow. This guide follows the same progression as the README, then expands on the hosted install scripts and report-friendly automation use cases.</p>
+            </div>
+
+            <div class="container doc-layout">
+                <aside class="toc">
+                    <h4>On this page</h4>
+                    <ul>
+                        <li><a href="#start">Getting started</a></li>
+                        <li><a href="#check">Check websites</a></li>
+                        <li><a href="#reports">Generate reports</a></li>
+                        <li><a href="#images">Download images</a></li>
+                        <li><a href="#manga">Download manga chapters</a></li>
+                        <li><a href="#library">Regenerate the browser</a></li>
+                        <li><a href="#tuning">Tune crawl behavior</a></li>
+                        <li><a href="#troubleshooting">Troubleshooting</a></li>
+                    </ul>
+                </aside>
+
+                <div class="doc-shell">
+                    <section class="doc-section" id="start">
+                        <h2>Getting started</h2>
+                        <p>The CLI exposes three commands: `check`, `images`, and `library`. In practice, that maps neatly to site validation, downloading content, and rebuilding the offline browser for an existing folder tree.</p>
+                        <div class="code-block"><pre><code>argiope check https://example.com
+argiope images https://example.com/gallery -o ./images
+argiope library ./images</code></pre></div>
+                        <p>If you are brand new to the project, start with `check` first. It gives you immediate output and confirms the install, network access, and crawl defaults in a single run.</p>
+                    </section>
+
+                    <section class="doc-section" id="check">
+                        <h2>Check websites for broken links</h2>
+                        <p>`argiope check` crawls a starting URL, stays within the same origin, and reports broken responses, errors, and timeouts. The default mode prints a concise terminal summary, which is enough for local QA.</p>
+                        <div class="code-block"><pre><code>argiope check https://example.com
+argiope check https://example.com --depth 5 --timeout 15
+argiope check https://example.com --verbose</code></pre></div>
+                        <h3>When to use it</h3>
+                        <ul>
+                            <li>Validate a marketing or docs site before release.</li>
+                            <li>Check whether a redirect or URL migration left stale links behind.</li>
+                            <li>Generate a report artifact in CI without noisy console output.</li>
+                        </ul>
+                        <div class="callout"><strong>Same-origin focus:</strong> argiope distinguishes internal and external URLs in the results, but crawling stays domain-restricted so the run remains predictable.</div>
+                    </section>
+
+                    <section class="doc-section" id="reports">
+                        <h2>Generate reports for review and CI</h2>
+                        <p>Report mode writes directly to a file and suppresses normal console output. That makes it useful for artifact uploads, PR comments, or publishing a human-readable HTML result after a workflow run.</p>
+                        <div class="report-grid">
+                            <div class="report-card"><strong>Text</strong><p>Default format. Good for logs and quick terminal-first review.</p><span class="command-inline">--report report.txt</span></div>
+                            <div class="report-card"><strong>Markdown</strong><p>Useful for GitHub comments, summaries, or wiki-style output.</p><span class="command-inline">--report report.md --report-format markdown</span></div>
+                            <div class="report-card"><strong>HTML</strong><p>Self-contained file with inline CSS and a presentation-friendly layout.</p><span class="command-inline">--report report.html --report-format html</span></div>
+                        </div>
+                        <div class="code-block"><pre><code>argiope check https://example.com --report report.md --report-format markdown
+argiope check https://example.com --report report.html --report-format html --include-positives</code></pre></div>
+                        <p>By default the report contains only broken results. Add `--include-positives` when the point is a complete crawl record instead of a failure-focused summary.</p>
+                    </section>
+
+                    <section class="doc-section" id="images">
+                        <h2>Download images and build an offline browser</h2>
+                        <p>`argiope images` stores images in organized directories, then generates a small static browsing layer across the output tree. The result works well for archiving galleries, collecting media from a known site, or producing a portable HTML deliverable.</p>
+                        <div class="code-block"><pre><code>argiope images https://example.com/gallery -o ./images
+xdg-open ./images/library.html</code></pre></div>
+                        <h3>Generated files</h3>
+                        <ul>
+                            <li>`library.html` at the output root as the main landing page.</li>
+                            <li>`index.html` in nested folders for navigation and thumbnail overviews.</li>
+                            <li>`reader.html` in image folders for ordered prev/next reading.</li>
+                        </ul>
+                        <p>The generated pages keep links relative and percent-encode names for local file browsing, so the archive stays usable even after moving it somewhere else.</p>
+                    </section>
+
+                    <section class="doc-section" id="manga">
+                        <h2>Download MangaFox chapter ranges</h2>
+                        <p>When the input URL points at `fanfox.net`, `images` switches into MangaFox-aware chapter discovery. The primary source is the manga RSS feed, which is especially helpful for titles where the HTML chapter list is incomplete or JavaScript-rendered.</p>
+                        <div class="code-block"><pre><code># Download all chapters
+argiope images https://fanfox.net/manga/naruto -o ./manga
+
+# Download a filtered range
+argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
+
+# Inspect chapter discovery output
+argiope images https://fanfox.net/manga/naruto --verbose</code></pre></div>
+                        <div class="callout success"><strong>Ordering matters:</strong> chapters are sorted numerically, so `1`, `2`, `10`, and `100.1` stay in reading order instead of lexical order.</div>
+                    </section>
+
+                    <section class="doc-section" id="library">
+                        <h2>Regenerate the browser for existing folders</h2>
+                        <p>Use `argiope library` when you already have a directory of downloaded images and only want to rebuild the HTML browser layer.</p>
+                        <div class="code-block"><pre><code>argiope library ./images
+argiope library ./manga</code></pre></div>
+                        <p>This is useful after manual file moves, after upgrading to a newer browser UI, or when the original `images` run is long finished but the folder still exists.</p>
+                    </section>
+
+                    <section class="doc-section" id="tuning">
+                        <h2>Tune crawl behavior</h2>
+                        <p>The crawler keeps the options simple: depth, timeout, delay, verbose mode, and optional parallel crawling.</p>
+                        <div class="param-grid">
+                            <div class="param-item"><strong>`--depth N`</strong><p>Maximum crawl depth. Default is `3`.</p></div>
+                            <div class="param-item"><strong>`--timeout N`</strong><p>Request timeout in seconds. Default is `10`.</p></div>
+                            <div class="param-item"><strong>`--delay N`</strong><p>Delay between requests in milliseconds. Default is `100`.</p></div>
+                            <div class="param-item"><strong>`--parallel`</strong><p>Enable concurrent crawling for faster runs on larger sites.</p></div>
+                        </div>
+                        <div class="code-block"><pre><code>argiope check https://example.com --parallel --depth 5 --timeout 20
+argiope images https://example.com/archive --delay 250 -o ./archive</code></pre></div>
+                    </section>
+
+                    <section class="doc-section" id="troubleshooting">
+                        <h2>Troubleshooting</h2>
+                        <h3>Chapters are missing</h3>
+                        <p>Run the MangaFox download with `--verbose` first. That shows the discovered chapter list and the order it will use.</p>
+                        <h3>`argiope` is not found after install</h3>
+                        <p>Open a new terminal and recheck the PATH. The Windows installer updates the user PATH, but active shells do not refresh themselves.</p>
+                        <h3>I only want a static browser refresh</h3>
+                        <p>Use `argiope library ./your-folder` instead of re-running a full download.</p>
+                    </section>
+                </div>
+            </div>
+            <button class="toc-toggle" type="button" aria-label="Toggle table of contents">≡</button>
+        </main>
+
+        <footer class="footer">
+            <div class="container"><div class="footer-panel"><div class="footer-grid"><div class="footer-column"><h4>argiope</h4><p>Zero-dependency crawling for validation and archiving.</p></div><div class="footer-column"><h4>Read next</h4><ul><li><a href="reference.html">CLI reference</a></li><li><a href="cicd.html">CI/CD</a></li></ul></div><div class="footer-column"><h4>Install</h4><ul><li><a href="install.html">Installation guide</a></li><li><a href="install-scripts.html">Install scripts</a></li></ul></div><div class="footer-column"><h4>GitHub</h4><ul><li><a href="https://github.com/christianhelle/argiope">Repository</a></li><li><a href="https://github.com/christianhelle/argiope/releases">Releases</a></li></ul></div></div><div class="footer-bottom">MIT licensed. Built for GitHub Pages.</div></div></div>
+        </footer>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

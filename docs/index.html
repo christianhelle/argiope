@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>argiope - Zero-dependency web crawler</title>
+    <meta name="description" content="argiope is a Zig CLI for broken-link detection, image archiving, offline HTML browsing, and MangaFox chapter downloads.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕷️</text></svg>">
+</head>
+<body data-page="home">
+    <div class="site-shell">
+        <nav class="navbar">
+            <div class="container nav-container">
+                <a class="nav-brand" href="index.html">
+                    <span class="brand-mark">🕷</span>
+                    <span class="brand-copy">
+                        <strong>argiope</strong>
+                        <span>Web crawler and image archiver</span>
+                    </span>
+                </a>
+                <div class="nav-actions">
+                    <ul class="nav-menu">
+                        <li><a class="nav-link" href="#home">Home</a></li>
+                        <li><a class="nav-link" href="#features">Features</a></li>
+                        <li><a class="nav-link" href="install.html" data-page="install.html">Installation</a></li>
+                        <li><a class="nav-link" href="#quickstart">Quick Start</a></li>
+                        <li><a class="nav-link" href="guide.html" data-page="guide.html">Guide</a></li>
+                        <li><a class="nav-link" href="reference.html" data-page="reference.html">Reference</a></li>
+                        <li><a class="nav-link" href="cicd.html" data-page="cicd.html">CI/CD</a></li>
+                        <li><a class="nav-link external" href="https://github.com/christianhelle/argiope">GitHub</a></li>
+                    </ul>
+                    <button class="theme-toggle" type="button" aria-label="Toggle theme">☾</button>
+                    <button class="hamburger" type="button" aria-label="Toggle navigation">
+                        <span></span><span></span><span></span>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <main>
+            <section class="hero" id="home">
+                <div class="container hero-grid">
+                    <div>
+                        <span class="eyebrow">Zig CLI for link checking and archiving</span>
+                        <h1>Catch broken links. Archive image-heavy sites. Browse everything offline.</h1>
+                        <p>argiope is a zero-dependency command-line crawler built for website QA, image downloads, self-contained reports, and portable HTML browsing. It ships as a single binary for Linux, macOS, and Windows.</p>
+                        <div class="hero-actions">
+                            <a class="btn btn-primary" href="install.html">Install argiope</a>
+                            <a class="btn btn-secondary" href="guide.html">Read the guide</a>
+                            <a class="btn btn-secondary" href="https://github.com/christianhelle/argiope/releases/latest">Download latest release</a>
+                        </div>
+                        <div class="hero-meta">
+                            <span class="stat-pill">Single static binary</span>
+                            <span class="stat-pill">Text, Markdown, HTML reports</span>
+                            <span class="stat-pill">Offline browser generation</span>
+                        </div>
+                        <div class="badges">
+                            <img src="https://github.com/christianhelle/argiope/actions/workflows/ci.yml/badge.svg" alt="CI status">
+                            <img src="https://github.com/christianhelle/argiope/actions/workflows/release.yml/badge.svg" alt="Release status">
+                        </div>
+                    </div>
+                    <div class="hero-panel">
+                        <div class="terminal">
+                            <div class="terminal-header">
+                                <div class="terminal-dots"><span></span><span></span><span></span></div>
+                                <div>argiope check</div>
+                            </div>
+                            <div class="terminal-body">
+                                <div class="terminal-line"><span class="prompt">$</span> argiope check https://example.com --report report.html --report-format html</div>
+                                <div class="terminal-line">Crawling https://example.com (depth=3, timeout=10s)...</div>
+                                <div class="terminal-line term-danger">404      internal   45         https://example.com/missing-page</div>
+                                <div class="terminal-line term-warn">timeout  external   10001      https://dead-link.example.org/page</div>
+                                <div class="terminal-line"></div>
+                                <div class="terminal-line">Summary:</div>
+                                <div class="terminal-line">  Total URLs checked: 42</div>
+                                <div class="terminal-line">  OK:                 40</div>
+                                <div class="terminal-line">  Broken:             1</div>
+                                <div class="terminal-line">  Errors:             1</div>
+                                <div class="terminal-line term-success">Saved self-contained report to ./report.html</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section" id="features">
+                <div class="container">
+                    <h2 class="section-heading">Built for practical crawling work</h2>
+                    <p class="section-intro">The repo already covers multiple workflows - site validation, image archiving, manga downloads, and offline browsing. The website mirrors that split so new users can quickly pick the right command path.</p>
+                    <div class="feature-grid">
+                        <article class="card">
+                            <div class="icon">🔎</div>
+                            <h3>Broken-link detection</h3>
+                            <p>Crawl same-origin pages, catch 4xx, 5xx, redirects, and timeouts, then turn the results into terminal output or reusable reports.</p>
+                        </article>
+                        <article class="card">
+                            <div class="icon">🧾</div>
+                            <h3>Report generation</h3>
+                            <p>Write text, Markdown, or self-contained HTML reports, with optional positive results included for audits and CI workflows.</p>
+                        </article>
+                        <article class="card">
+                            <div class="icon">🖼️</div>
+                            <h3>Image archiving</h3>
+                            <p>Download images into structured folders with configurable crawl depth, delay, timeout, and optional parallel crawling.</p>
+                        </article>
+                        <article class="card">
+                            <div class="icon">📚</div>
+                            <h3>Offline HTML browser</h3>
+                            <p>Generate `library.html`, nested `index.html`, and `reader.html` pages so downloaded image trees stay easy to explore locally.</p>
+                        </article>
+                        <article class="card">
+                            <div class="icon">🕸️</div>
+                            <h3>MangaFox support</h3>
+                            <p>Download chapter sets from `fanfox.net`, keep numeric chapter order, and filter ranges with `--chapters N-M`.</p>
+                        </article>
+                        <article class="card">
+                            <div class="icon">⚙️</div>
+                            <h3>Zero dependencies</h3>
+                            <p>Built with Zig standard library only, released as a single static binary for Linux, macOS, and Windows.</p>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section" id="installation">
+                <div class="container">
+                    <h2 class="section-heading">Install it the way your environment expects</h2>
+                    <p class="section-intro">The Pages site also hosts the install scripts directly, so you can use clean install URLs instead of raw GitHub file links.</p>
+                    <div class="install-grid">
+                        <article class="command-card install-card featured">
+                            <div class="button-row">
+                                <span class="badge brand">Recommended</span>
+                                <span class="badge">Hosted on GitHub Pages</span>
+                            </div>
+                            <h3>One-command install scripts</h3>
+                            <p>Use the same scripts tracked in the repository, published at stable Pages endpoints.</p>
+                            <div class="install-grid">
+                                <div>
+                                    <strong>Linux / macOS</strong>
+                                    <div class="install-code"><pre><code>curl -fsSL https://christianhelle.github.io/argiope/install | sh</code></pre></div>
+                                </div>
+                                <div>
+                                    <strong>Windows PowerShell</strong>
+                                    <div class="install-code"><pre><code>irm https://christianhelle.github.io/argiope/install.ps1 | iex</code></pre></div>
+                                </div>
+                            </div>
+                            <p>The scripts detect the platform, download the latest release asset, and install `argiope` to a PATH-friendly location.</p>
+                        </article>
+                        <article class="command-card">
+                            <div class="icon">📦</div>
+                            <h3>Snap Store</h3>
+                            <div class="install-code"><pre><code>sudo snap install argiope</code></pre></div>
+                            <p>Fastest Linux-native install when snap is already available.</p>
+                        </article>
+                        <article class="command-card">
+                            <div class="icon">⬇️</div>
+                            <h3>GitHub Releases</h3>
+                            <div class="install-code"><pre><code>https://github.com/christianhelle/argiope/releases/latest</code></pre></div>
+                            <p>Download prebuilt archives for Linux x86_64, Linux aarch64, macOS x86_64, macOS aarch64, and Windows x86_64.</p>
+                        </article>
+                        <article class="command-card">
+                            <div class="icon">🧱</div>
+                            <h3>Build from source</h3>
+                            <div class="install-code"><pre><code>git clone https://github.com/christianhelle/argiope.git
+cd argiope
+zig build -Doptimize=ReleaseFast</code></pre></div>
+                            <p>Requires Zig 0.15.2 or later. The binary lands in `zig-out/bin/argiope`.</p>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section" id="quickstart">
+                <div class="container">
+                    <h2 class="section-heading">Quick start</h2>
+                    <div class="example-grid">
+                        <article>
+                            <span class="badge">Link checking</span>
+                            <h3>Check a site and save an HTML report</h3>
+                            <div class="code-block"><pre><code>argiope check https://example.com
+argiope check https://example.com --depth 5 --timeout 15
+argiope check https://example.com --report report.html --report-format html</code></pre></div>
+                            <p>Good fit for docs sites, release checks, and CI jobs where you need a readable artifact at the end.</p>
+                        </article>
+                        <article>
+                            <span class="badge">Image archiving</span>
+                            <h3>Download a gallery and browse it locally</h3>
+                            <div class="code-block"><pre><code>argiope images https://example.com/gallery -o ./images
+xdg-open ./images/library.html</code></pre></div>
+                            <p>Every run generates a portable browser with folder landing pages and ordered reader views.</p>
+                        </article>
+                        <article>
+                            <span class="badge">MangaFox</span>
+                            <h3>Download a chapter range</h3>
+                            <div class="code-block"><pre><code>argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
+argiope library ./manga</code></pre></div>
+                            <p>RSS-driven chapter detection keeps numeric ordering stable, with HTML parsing as fallback.</p>
+                        </article>
+                    </div>
+                    <div class="callout success">
+                        <strong>Portable output:</strong> argiope keeps generated browsing pages relative-link friendly, so copied folders still work from local disk, USB storage, or CI artifacts.
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="container">
+                    <h2 class="section-heading">Pick the path you need</h2>
+                    <div class="link-grid">
+                        <a class="link-card" href="install.html">
+                            <span class="badge brand">Install</span>
+                            <h3>Installation guide</h3>
+                            <p>Shell, PowerShell, Snap, release archives, source builds, and PATH verification.</p>
+                        </a>
+                        <a class="link-card" href="guide.html">
+                            <span class="badge">Guide</span>
+                            <h3>Usage walkthrough</h3>
+                            <p>Broken-link checks, image downloads, report mode, offline browser output, and troubleshooting.</p>
+                        </a>
+                        <a class="link-card" href="reference.html">
+                            <span class="badge">CLI reference</span>
+                            <h3>Commands and flags</h3>
+                            <p>Exact command list, defaults, examples, report formats, and command behavior.</p>
+                        </a>
+                        <a class="link-card" href="cicd.html">
+                            <span class="badge warning">Automation</span>
+                            <h3>CI/CD examples</h3>
+                            <p>Use HTML or Markdown reports inside GitHub Actions and publish them as workflow artifacts.</p>
+                        </a>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <div class="container">
+                <div class="footer-panel">
+                    <div class="footer-grid">
+                        <div class="footer-column">
+                            <h4>argiope</h4>
+                            <p>A zero-dependency CLI for broken-link detection, image archiving, offline HTML browsing, and MangaFox downloads.</p>
+                        </div>
+                        <div class="footer-column">
+                            <h4>Docs</h4>
+                            <ul>
+                                <li><a href="install.html">Installation</a></li>
+                                <li><a href="guide.html">Guide</a></li>
+                                <li><a href="reference.html">Reference</a></li>
+                                <li><a href="cicd.html">CI/CD</a></li>
+                            </ul>
+                        </div>
+                        <div class="footer-column">
+                            <h4>Install scripts</h4>
+                            <ul>
+                                <li><a href="install-scripts.html">Install script page</a></li>
+                                <li><a href="install">Linux/macOS script</a></li>
+                                <li><a href="install.ps1">PowerShell script</a></li>
+                            </ul>
+                        </div>
+                        <div class="footer-column">
+                            <h4>Project</h4>
+                            <ul>
+                                <li><a href="https://github.com/christianhelle/argiope">Repository</a></li>
+                                <li><a href="https://github.com/christianhelle/argiope/releases">Releases</a></li>
+                                <li><a href="https://github.com/christianhelle/argiope/issues">Issues</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="footer-bottom">MIT licensed. Built for GitHub Pages.</div>
+                </div>
+            </div>
+        </footer>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
