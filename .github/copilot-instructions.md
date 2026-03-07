@@ -2,6 +2,18 @@
 
 `argiope` is a web crawler CLI tool written in Zig (minimum version 0.15.2) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`. The `images` command now also generates portable HTML browsing pages (root `library.html`, nested `index.html`, and per-folder `reader.html`) after downloads complete. Release automation updates `snapcraft.yaml` and `src/cli.zig` together.
 
+## Source Control and Documentation (MANDATORY)
+
+**Keep README in sync:** After every feature addition, change, or bug fix, update `README.md` to reflect the current state of the application. This must be done automatically — do not wait to be asked. Update usage examples, the options reference, feature lists, and architecture notes as needed. The README is the source of truth for users.
+
+**Commits:** Make commits in small logical chunks automatically — do not wait to be asked.
+
+- Use brief commit messages (one line only).
+- Always commit as the user (the actual developer), never create commits under fictional identities like "Copilot Agent" or similar.
+- **Never commit directly to the main branch.** If you detect that the current branch is `main`, create a feature branch (e.g., `your-feature-name`) before making any commits.
+- Use clear, concise commit messages that describe the change in one sentence.
+- Never add `Co-authored-by` trailers to commits in this repository.
+
 ## Build, run, and test
 
 ```sh
@@ -66,14 +78,3 @@ The visited set uses `StringHashMapUnmanaged` with owned key strings, freed on `
 `CrawlResult.deinit()` skips freeing zero-length url slices (error fallback path).
 
 **Output buffering:** stdout uses a stack-allocated buffer via `std.fs.File.stdout().writer(&buf)`. Always call `flush()` after printing.
-
-## Source Control and Documentation
-
-**Keep README in sync:** After every feature addition, change, or bug fix, update `README.md` to reflect the current state of the application. This must be done automatically — do not wait to be asked. Update usage examples, the options reference, feature lists, and architecture notes as needed. The README is the source of truth for users.
-
-**Commits:** Make commits in small logical chunks automatically — do not wait to be asked.
-- Use brief commit messages (one line only).
-- Always commit as the user (the actual developer), never create commits under fictional identities like "Copilot Agent" or similar.
-- **Never commit directly to the main branch.** If you detect that the current branch is `main`, create a feature branch (e.g., `feature/your-feature-name`) before making any commits.
-- Use clear, concise commit messages that describe the change in one sentence.
-- Never add `Co-authored-by` trailers to commits in this repository.
