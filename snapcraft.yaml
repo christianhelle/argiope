@@ -3,13 +3,33 @@ base: core22
 version: 0.2.3
 summary: A web crawler for broken-link detection and image downloading
 description: |
-  argiope crawls websites to detect broken links and download images.
-  It supports configurable crawl depth, request timeouts, and rate limiting.
-  Images can be saved to an organized directory structure for archiving websites.
+  A high-performance web crawler written in Zig for broken-link detection and image downloading.
 
-  MangaFox support: pass a fanfox.net manga URL to the 'images' command to
-  download chapter pages organized as [manga]/[chapter]/[page].jpg, with
-  optional chapter range filtering via --chapters N-M.
+  **Features:**
+  - Crawl websites and detect broken links (4xx/5xx/timeout)
+  - Generate reports in text, Markdown, or HTML format
+  - Download images from web pages to organized directories
+  - Generate portable HTML browsing pages for downloaded image trees
+  - Download manga chapters from MangaFox (fanfox.net) by title with optional chapter range filtering
+  - BFS traversal with configurable depth, timeouts, and rate limiting
+  - Domain-restricted crawling with same-origin checks
+  - Parallel crawling support for improved performance
+  - Zero external dependencies — uses only Zig's standard library
+  - Single static binary — no runtime needed
+  - Cross-platform: Linux, macOS, Windows
+
+  **Commands:**
+  - `check <url>`: Crawl a website and report broken links
+  - `images <url>`: Download images from a website or manga from MangaFox
+  - `library <dir>`: Generate HTML browser for existing image directories
+
+  **Examples:**
+  - Check for broken links: `argiope check https://example.com --depth 5`
+  - Download images: `argiope images https://example.com/gallery -o ./images`
+  - Download manga: `argiope images https://fanfox.net/manga/title --chapters 1-50 -o ./manga`
+  - Generate reports: `argiope check https://example.com --report report.html --report-format html`
+
+  The generated HTML browser supports light/dark/system theme modes with localStorage persistence, making it perfect for offline browsing and archiving websites.
 
 grade: stable
 confinement: strict
