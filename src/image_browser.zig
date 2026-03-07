@@ -256,6 +256,44 @@ fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     return list.toOwnedSlice(allocator);
 }
 
+fn escapeHtmlAttribute(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+    return escapeHtml(allocator, text);
+}
+
+fn appendPercentEncodedByte(list: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, byte: u8) !void {
+    const hex = "0123456789ABCDEF";
+    try list.append(allocator, '%');
+    try list.append(allocator, hex[byte >> 4]);
+    try list.append(allocator, hex[byte & 0x0f]);
+}
+
+fn isUnreservedUrlByte(byte: u8) bool {
+    return std.ascii.isAlphanumeric(byte) or byte == '-' or byte == '.' or byte == '_' or byte == '~';
+}
+
+fn encodeRelativeUrlPath(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    var list: std.ArrayListUnmanaged(u8) = .empty;
+    defer list.deinit(allocator);
+
+    for (path) |byte| {
+        if (byte == '/') {
+            try list.append(allocator, byte);
+        } else if (isUnreservedUrlByte(byte)) {
+            try list.append(allocator, byte);
+        } else {
+            try appendPercentEncodedByte(&list, allocator, byte);
+        }
+    }
+
+    return list.toOwnedSlice(allocator);
+}
+
+fn encodeRelativeUrlAttribute(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    const encoded_path = try encodeRelativeUrlPath(allocator, path);
+    defer allocator.free(encoded_path);
+    return escapeHtmlAttribute(allocator, encoded_path);
+}
+
 fn targetPath(allocator: std.mem.Allocator, dir_rel_path: []const u8, file_name: []const u8) ![]u8 {
     if (dir_rel_path.len == 0) return allocator.dupe(u8, file_name);
     return std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_rel_path, file_name });
@@ -539,7 +577,9 @@ fn writeBreadcrumbs(allocator: std.mem.Allocator, w: anytype, tree: *const SiteT
     try w.writeAll("<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\">\n");
     const home_href = try relativeLink(allocator, tree.nodes.items[index].rel_path, root_page_name);
     defer allocator.free(home_href);
-    try w.print("<a href=\"{s}\">Library</a>\n", .{home_href});
+    const home_href_attr = try encodeRelativeUrlAttribute(allocator, home_href);
+    defer allocator.free(home_href_attr);
+    try w.print("<a href=\"{s}\">Library</a>\n", .{home_href_attr});
 
     var chain: std.ArrayListUnmanaged(usize) = .empty;
     defer chain.deinit(allocator);
@@ -559,10 +599,12 @@ fn writeBreadcrumbs(allocator: std.mem.Allocator, w: anytype, tree: *const SiteT
         defer allocator.free(target);
         const href = try relativeLink(allocator, tree.nodes.items[index].rel_path, target);
         defer allocator.free(href);
+        const href_attr = try encodeRelativeUrlAttribute(allocator, href);
+        defer allocator.free(href_attr);
         const escaped_name = try escapeHtml(allocator, node.name);
         defer allocator.free(escaped_name);
         try w.writeAll("<span class=\"sep\">/</span>\n");
-        try w.print("<a href=\"{s}\">{s}</a>\n", .{ href, escaped_name });
+        try w.print("<a href=\"{s}\">{s}</a>\n", .{ href_attr, escaped_name });
     }
 
     if (index != 0) {
@@ -635,8 +677,10 @@ fn writeDirectoryPage(
         defer allocator.free(reader_target);
         const reader_href = try relativeLink(allocator, node.rel_path, reader_target);
         defer allocator.free(reader_href);
+        const reader_href_attr = try encodeRelativeUrlAttribute(allocator, reader_href);
+        defer allocator.free(reader_href_attr);
         try w.writeAll("<div class=\"actions\">\n");
-        try w.print("<a class=\"button primary\" href=\"{s}#1\">Open reader</a>\n", .{reader_href});
+        try w.print("<a class=\"button primary\" href=\"{s}#1\">Open reader</a>\n", .{reader_href_attr});
         try w.writeAll("</div>\n");
     }
     try w.writeAll("</section>\n");
@@ -651,17 +695,21 @@ fn writeDirectoryPage(
             defer allocator.free(child_target);
             const child_href = try relativeLink(allocator, node.rel_path, child_target);
             defer allocator.free(child_href);
+            const child_href_attr = try encodeRelativeUrlAttribute(allocator, child_href);
+            defer allocator.free(child_href_attr);
             const escaped_name = try escapeHtml(allocator, child.name);
             defer allocator.free(escaped_name);
             try w.writeAll("<article class=\"card folder-card\">\n");
-            try w.print("<h3><a href=\"{s}\">{s}</a></h3>\n", .{ child_href, escaped_name });
+            try w.print("<h3><a href=\"{s}\">{s}</a></h3>\n", .{ child_href_attr, escaped_name });
             try w.print("<p>{d} image(s) across {d} subfolder(s).</p>\n", .{ child.total_images, child.subdirs.items.len });
             if (child.images.items.len > 0) {
                 const child_reader_target = try targetPath(allocator, child.rel_path, "reader.html");
                 defer allocator.free(child_reader_target);
                 const child_reader_href = try relativeLink(allocator, node.rel_path, child_reader_target);
                 defer allocator.free(child_reader_href);
-                try w.print("<div class=\"actions\"><a class=\"button\" href=\"{s}#1\">Start reading</a></div>\n", .{child_reader_href});
+                const child_reader_href_attr = try encodeRelativeUrlAttribute(allocator, child_reader_href);
+                defer allocator.free(child_reader_href_attr);
+                try w.print("<div class=\"actions\"><a class=\"button\" href=\"{s}#1\">Start reading</a></div>\n", .{child_reader_href_attr});
             }
             try w.writeAll("</article>\n");
         }
@@ -670,13 +718,15 @@ fn writeDirectoryPage(
 
     if (node.images.items.len > 0) {
         try w.writeAll("<section class=\"section\">\n<h2>Thumbnails</h2>\n<div class=\"thumb-grid\">\n");
+        const reader_file_attr = try encodeRelativeUrlAttribute(allocator, "reader.html");
+        defer allocator.free(reader_file_attr);
         for (node.images.items, 0..) |image, image_index| {
             const escaped_name = try escapeHtml(allocator, image.name);
             defer allocator.free(escaped_name);
-            try w.writeAll("<a class=\"card thumb-card\" href=\"reader.html#");
-            try w.print("{d}", .{image_index + 1});
-            try w.writeAll("\">\n<div class=\"thumb-image\">\n<img loading=\"lazy\" src=\"");
-            try w.print("{s}", .{escaped_name});
+            const image_src_attr = try encodeRelativeUrlAttribute(allocator, image.name);
+            defer allocator.free(image_src_attr);
+            try w.print("<a class=\"card thumb-card\" href=\"{s}#{d}\">\n<div class=\"thumb-image\">\n<img loading=\"lazy\" src=\"", .{ reader_file_attr, image_index + 1 });
+            try w.print("{s}", .{image_src_attr});
             try w.writeAll("\" alt=\"");
             try w.print("{s}", .{escaped_name});
             try w.writeAll("\">\n</div>\n<div class=\"thumb-meta\">\n<strong>");
@@ -732,7 +782,9 @@ fn writeReaderPage(
     try writeThemeControls(w);
     try w.writeAll("</div>\n<div class=\"actions\">\n");
     const overview_file = if (index == 0) root_page_name else "index.html";
-    try w.print("<a class=\"button\" href=\"{s}\">Back to overview</a>\n", .{overview_file});
+    const overview_href_attr = try encodeRelativeUrlAttribute(allocator, overview_file);
+    defer allocator.free(overview_href_attr);
+    try w.print("<a class=\"button\" href=\"{s}\">Back to overview</a>\n", .{overview_href_attr});
     try w.writeAll("</div>\n</section>\n");
 
     try writeBreadcrumbs(allocator, w, tree, index);
@@ -753,7 +805,9 @@ fn writeReaderPage(
     for (node.images.items) |image| {
         const escaped_name = try escapeHtml(allocator, image.name);
         defer allocator.free(escaped_name);
-        try w.print("<a data-src=\"{s}\" data-label=\"{s}\"></a>\n", .{ escaped_name, escaped_name });
+        const image_src_attr = try encodeRelativeUrlAttribute(allocator, image.name);
+        defer allocator.free(image_src_attr);
+        try w.print("<a data-src=\"{s}\" data-label=\"{s}\"></a>\n", .{ image_src_attr, escaped_name });
     }
 
     try w.writeAll(
@@ -763,9 +817,11 @@ fn writeReaderPage(
     for (node.images.items, 0..) |image, image_index| {
         const escaped_name = try escapeHtml(allocator, image.name);
         defer allocator.free(escaped_name);
+        const image_src_attr = try encodeRelativeUrlAttribute(allocator, image.name);
+        defer allocator.free(image_src_attr);
         try w.print(
             "<a class=\"strip-item\" href=\"#{d}\"><img loading=\"lazy\" src=\"{s}\" alt=\"{s}\"></a>\n",
-            .{ image_index + 1, escaped_name, escaped_name },
+            .{ image_index + 1, image_src_attr, escaped_name },
         );
     }
     try w.writeAll(
@@ -851,6 +907,14 @@ test "relativeLink handles nested directories" {
     try std.testing.expectEqualStrings("../10/index.html", nested_to_sibling);
 }
 
+test "encodeRelativeUrlPath percent-encodes unsafe path bytes" {
+    const allocator = std.testing.allocator;
+    const encoded = try encodeRelativeUrlPath(allocator, "folder name/100% #1?\"'&.png");
+    defer allocator.free(encoded);
+
+    try std.testing.expectEqualStrings("folder%20name/100%25%20%231%3F%22%27%26.png", encoded);
+}
+
 test "generate creates root, nested indexes, and reader pages" {
     const allocator = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
@@ -907,4 +971,45 @@ test "generate creates root, nested indexes, and reader pages" {
     const image_001_pos = std.mem.indexOfPos(u8, reader_html, 0, "001.jpg").?;
     const image_010_pos = std.mem.indexOfPos(u8, reader_html, 0, "010.jpg").?;
     try std.testing.expect(image_001_pos < image_010_pos);
+}
+
+test "generate encodes unsafe filenames and folder names in HTML attributes" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.makePath("gallery & \"special\" #1");
+    try tmp.dir.writeFile(.{
+        .sub_path = "gallery & \"special\" #1/cover 'special' & 100% #1?.png",
+        .data = "image",
+    });
+
+    const root_path = try tmp.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(root_path);
+
+    const summary = try generate(allocator, root_path);
+    try std.testing.expectEqual(@as(usize, 1), summary.images);
+    try std.testing.expect(summary.directories >= 2);
+    try std.testing.expect(summary.reader_pages >= 1);
+
+    const encoded_dir = "gallery%20%26%20%22special%22%20%231";
+    const encoded_image = "cover%20%27special%27%20%26%20100%25%20%231%3F.png";
+
+    const library_html = try tmp.dir.readFileAlloc(allocator, root_page_name, 65536);
+    defer allocator.free(library_html);
+    try std.testing.expect(std.mem.indexOf(u8, library_html, encoded_dir ++ "/index.html") != null);
+    try std.testing.expect(std.mem.indexOf(u8, library_html, encoded_dir ++ "/reader.html#1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, library_html, "gallery &amp; &quot;special&quot; #1") != null);
+
+    const folder_index = try tmp.dir.readFileAlloc(allocator, "gallery & \"special\" #1/index.html", 65536);
+    defer allocator.free(folder_index);
+    try std.testing.expect(std.mem.indexOf(u8, folder_index, "src=\"" ++ encoded_image ++ "\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, folder_index, "src=\"cover 'special' & 100% #1?.png\"") == null);
+    try std.testing.expect(std.mem.indexOf(u8, folder_index, "alt=\"cover &#39;special&#39; &amp; 100% #1?") != null);
+
+    const reader_html = try tmp.dir.readFileAlloc(allocator, "gallery & \"special\" #1/reader.html", 65536);
+    defer allocator.free(reader_html);
+    try std.testing.expect(std.mem.indexOf(u8, reader_html, "data-src=\"" ++ encoded_image ++ "\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, reader_html, "src=\"" ++ encoded_image ++ "\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, reader_html, "data-label=\"cover &#39;special&#39; &amp; 100% #1?.png\"") != null);
 }

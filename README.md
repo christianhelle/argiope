@@ -89,7 +89,7 @@ argiope images https://manga-site.com/title --depth 2 -o ./manga
 
 Images are saved to `output_dir/page_N/image_N.ext` where the extension is derived from the source URL. After downloads finish, argiope also generates a portable HTML browser rooted at `output_dir/library.html`, plus nested `index.html` and per-folder `reader.html` pages for thumbnails and ordered reading.
 
-The generated browser works for both generic downloads and MangaFox chapter trees, keeps links relative for local file browsing, and includes light / dark / system theme controls with a `localStorage`-backed preference (default: system).
+The generated browser works for both generic downloads and MangaFox chapter trees, keeps links relative and percent-encodes folder/file names for local file browsing, and includes light / dark / system theme controls with a `localStorage`-backed preference (default: system).
 
 ### Download manga from MangaFox
 
