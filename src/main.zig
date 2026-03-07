@@ -2,6 +2,7 @@ const std = @import("std");
 const cli = @import("cli.zig");
 const link_checker = @import("link_checker.zig");
 const downloader = @import("downloader.zig");
+const image_browser = @import("image_browser.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -46,6 +47,11 @@ pub fn main() !void {
             const exit_code = try downloader.run(allocator, opts);
             if (exit_code != 0) std.process.exit(exit_code);
         },
+        .library => {
+            const dir = if (opts.url) |u| u else opts.output_dir;
+            const exit_code = try image_browser.run(allocator, dir);
+            if (exit_code != 0) std.process.exit(exit_code);
+        },
     }
 }
 
@@ -60,4 +66,5 @@ test "imports compile" {
     _ = @import("mangafox.zig");
     _ = @import("report.zig");
     _ = @import("summary.zig");
+    _ = @import("image_browser.zig");
 }

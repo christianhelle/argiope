@@ -12,20 +12,25 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    outputs:
+      release_sha: ${{ steps.bump.outputs.release_sha }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Update snapcraft.yaml version
+      - name: Update release versions
         run: |
           sed -i "s/^version: .*/version: ${{ env.VERSION }}/" snapcraft.yaml
+          sed -i "s/^pub const version = \".*\";$/pub const version = \"${{ env.VERSION }}\";/" src/cli.zig
 
       - name: Commit, tag, and push
+        id: bump
         run: |
           git config --global user.name "Continuous Integration"
           git config --global user.email "username@users.noreply.github.com"
-          git add snapcraft.yaml
-          git commit -m "Bump up snapcraft version to v${{ env.VERSION }}"
+          git add snapcraft.yaml src/cli.zig
+          git commit -m "Bump release version to v${{ env.VERSION }}"
           git push origin HEAD:main
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
@@ -50,6 +55,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_sha }}
 
       - uses: mlugg/setup-zig@v2
         with:
@@ -85,6 +92,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
+          target_commitish: ${{ needs.prepare.outputs.release_sha }}
           generate_release_notes: true
           files: |
             *.tar.gz

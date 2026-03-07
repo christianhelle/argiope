@@ -1,13 +1,13 @@
 # argiope – Copilot Instructions
 
-`argiope` is a web crawler CLI tool written in Zig (minimum version 0.15.2) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`.
+`argiope` is a web crawler CLI tool written in Zig (minimum version 0.15.2) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`. The `images` command now also generates portable HTML browsing pages (root `library.html`, nested `index.html`, and per-folder `reader.html`) after downloads complete. Release automation updates `snapcraft.yaml` and `src/cli.zig` together.
 
 ## Build, run, and test
 
 ```sh
 zig build                          # compile → zig-out/bin/argiope
 zig build run -- check <url>       # build + run link checker
-zig build run -- download <url>    # build + run image downloader
+zig build run -- images <url>      # build + run image downloader
 zig build test                     # run all tests
 make build                         # alternative via Makefile
 make test
@@ -24,6 +24,8 @@ main.zig  →  cli.zig  →  crawler.zig  →  http.zig
                               ↓
                     link_checker.zig  (check mode)
                     downloader.zig   (download mode)
+                              ↓
+                    image_browser.zig (HTML browse output)
 ```
 
 | File               | Responsibility                                                                                          |
@@ -36,7 +38,8 @@ main.zig  →  cli.zig  →  crawler.zig  →  http.zig
 | `crawler.zig`      | BFS crawl engine: visited `StringHashMap`, depth limiting, domain restriction, rate limiting            |
 | `link_checker.zig` | Broken link reporter: collects URLs, checks status, writes console output or delegates to report.zig |
 | `report.zig`       | Report generator: writes text, Markdown, or HTML reports from crawl results                          |
-| `downloader.zig`   | Image downloader: saves images to `output_dir/page_N/image_N.ext` structure                          |
+| `downloader.zig`   | Image downloader: saves images to disk, then triggers HTML browse page generation                    |
+| `image_browser.zig` | Filesystem-based HTML browser generator for generic and manga download trees                          |
 
 ## Zig 0.15 API Notes
 
@@ -73,3 +76,4 @@ The visited set uses `StringHashMapUnmanaged` with owned key strings, freed on `
 - Always commit as the user (the actual developer), never create commits under fictional identities like "Copilot Agent" or similar.
 - **Never commit directly to the main branch.** If you detect that the current branch is `main`, create a feature branch (e.g., `feature/your-feature-name`) before making any commits.
 - Use clear, concise commit messages that describe the change in one sentence.
+- Never add `Co-authored-by` trailers to commits in this repository.
