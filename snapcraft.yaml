@@ -5,31 +5,52 @@ summary: A web crawler for broken-link detection and image downloading
 description: |
   A high-performance web crawler written in Zig for broken-link detection and image downloading.
 
-  **Features:**
-  - Crawl websites and detect broken links (4xx/5xx/timeout)
-  - Generate reports in text, Markdown, or HTML format
-  - Download images from web pages to organized directories
-  - Generate portable HTML browsing pages for downloaded image trees
-  - Download manga chapters from MangaFox (fanfox.net) by title with optional chapter range filtering
-  - BFS traversal with configurable depth, timeouts, and rate limiting
-  - Domain-restricted crawling with same-origin checks
-  - Parallel crawling support for improved performance
+  **Overview:**
+  argiope is a fast, lightweight web crawler designed for broken-link detection, website archiving, and batch image downloading. It features intelligent HTML scanning, URL normalization, and sophisticated report generation. Built with zero external dependencies and compiled to a single static binary, it runs seamlessly across Linux, macOS, and Windows.
+
+  **Key Features:**
+  - Crawl websites and detect broken links (4xx/5xx/timeout errors)
+  - Generate comprehensive reports in text, Markdown, or self-contained HTML format
+  - Download images from web pages to organized directory structures
+  - Generate portable HTML browsing pages for downloaded image libraries with `library.html` landing page, nested `index.html` navigation, and per-folder `reader.html` viewers
+  - Specialized support for downloading manga chapters from MangaFox (fanfox.net) by title with optional chapter range filtering
+  - BFS (breadth-first search) traversal with configurable crawl depth, request timeouts, and rate limiting
+  - Domain-restricted crawling with automatic same-origin security checks
+  - Lightweight HTML scanner for precise link and image extraction from complex pages
+  - Intelligent URL normalization and relative-to-absolute URL resolution
+  - Parallel crawling support for improved performance on large sites
   - Zero external dependencies — uses only Zig's standard library
-  - Single static binary — no runtime needed
-  - Cross-platform: Linux, macOS, Windows
+  - Single static binary — no runtime, no installation hassles
+  - Cross-platform: Linux, macOS, Windows with identical behavior
 
   **Commands:**
-  - `check <url>`: Crawl a website and report broken links
-  - `images <url>`: Download images from a website or manga from MangaFox
-  - `library <dir>`: Generate HTML browser for existing image directories
+  - `check <url>`: Crawl a website and generate a detailed broken-link report with timing statistics
+  - `images <url>`: Download all images from a website or manga chapters from MangaFox to an organized structure
+  - `library <dir>`: Generate or regenerate HTML browser for existing image directories
 
-  **Examples:**
-  - Check for broken links: `argiope check https://example.com --depth 5`
-  - Download images: `argiope images https://example.com/gallery -o ./images`
-  - Download manga: `argiope images https://fanfox.net/manga/title --chapters 1-50 -o ./manga`
-  - Generate reports: `argiope check https://example.com --report report.html --report-format html`
+  **Usage Examples:**
+  - `argiope check https://example.com --depth 5` — Check site for broken links up to 5 levels deep
+  - `argiope images https://example.com/gallery -o ./images` — Archive gallery images with HTML browser
+  - `argiope images https://fanfox.net/manga/title --chapters 1-50` — Download manga chapters 1-50
+  - `argiope check https://example.com --report report.html --report-format html` — Generate HTML report for CI pipelines
+  - `argiope images https://example.com -o ./archive --parallel --depth 3` — Fast parallel crawling and download
 
-  The generated HTML browser supports light/dark/system theme modes with localStorage persistence, making it perfect for offline browsing and archiving websites.
+  **Report Features:**
+  Reports include detailed statistics: total URLs checked, OK count, broken count, error count, internal vs external split, and timing information (total time, average/min/max response times). HTML reports are self-contained with inline CSS and styled with status badges.
+
+  **HTML Browser:**
+  The generated portable HTML browser features light/dark/system theme modes with localStorage-backed preferences, relative links for offline browsing, percent-encoded filenames for local file access, and thumbnail galleries with ordered prev/next navigation. Works with generic image collections and deep MangaFox chapter trees alike.
+
+  **MangaFox Features:**
+  - Automatic chapter detection via RSS feeds with fallback to HTML parsing
+  - Numeric chapter ordering (1, 2, 10, 11, 100) not alphabetic
+  - Full support for decimal chapter numbers (5.5, 100.1) with correct sorting
+  - Chapter range filtering via `--chapters N-M` flag
+  - Organized output: `[manga-title]/[chapter]/[page].jpg`
+  - Verbose mode shows detailed chapter discovery information
+
+  **Performance & Reliability:**
+  Configurable request timeouts, delay between requests, and concurrent crawling options ensure efficient resource usage and reliable operation on rate-limited sites. Automatic redirect following, response size limiting, and detailed error reporting make it production-ready for CI pipelines and large-scale archiving. Perfect for website archiving, CI/CD integration, and offline browsing.
 
 grade: stable
 confinement: strict
