@@ -10,6 +10,7 @@ A web crawler for broken-link detection and image downloading, written in [Zig](
 - Crawl websites and detect broken links (4xx/5xx/timeout)
 - Generate reports in text, Markdown, or HTML format
 - Download images from web pages to organized directories
+- Generate portable HTML browsing pages for downloaded image trees (`library.html`, nested `index.html`, and `reader.html`)
 - Download manga chapters from [MangaFox (fanfox.net)](https://fanfox.net) by title, with optional chapter range filtering
 - BFS traversal with configurable depth, timeouts, and rate limiting
 - Domain-restricted crawling with same-origin checks
@@ -40,6 +41,8 @@ zig build -Doptimize=ReleaseFast
 ```
 
 The binary is at `zig-out/bin/argiope`.
+
+Release automation keeps `snapcraft.yaml` and `src/cli.zig` aligned so tagged release builds publish matching package and CLI versions.
 
 ## Usage
 
@@ -84,11 +87,13 @@ argiope images https://example.com/gallery -o ./images
 argiope images https://manga-site.com/title --depth 2 -o ./manga
 ```
 
-Images are saved to `output_dir/page_N/image_N.ext` where the extension is derived from the source URL.
+Images are saved to `output_dir/page_N/image_N.ext` where the extension is derived from the source URL. After downloads finish, argiope also generates a portable HTML browser rooted at `output_dir/library.html`, plus nested `index.html` and per-folder `reader.html` pages for thumbnails and ordered reading.
+
+The generated browser works for both generic downloads and MangaFox chapter trees, keeps links relative for local file browsing, and includes light / dark / system theme controls with a `localStorage`-backed preference (default: system).
 
 ### Download manga from MangaFox
 
-Pass a [fanfox.net](https://fanfox.net) manga URL to the `images` command. Chapter pages are downloaded automatically and saved as `[output_dir]/[manga-title]/[chapter]/[page].jpg`.
+Pass a [fanfox.net](https://fanfox.net) manga URL to the `images` command. Chapter pages are downloaded automatically and saved as `[output_dir]/[manga-title]/[chapter]/[page].jpg`, and the same HTML browser is generated across the manga folder tree for scalable chapter navigation.
 
 ```sh
 # Download all chapters
@@ -109,6 +114,22 @@ argiope images https://fanfox.net/manga/title --verbose
 ```
 
 This will show all chapters found and the order they will be downloaded in.
+
+### Browse downloaded images in HTML
+
+Open the generated root landing page after an `images` run:
+
+```sh
+xdg-open ./images/library.html
+```
+
+Each folder with downloaded images gets:
+
+- `index.html` for nested navigation and thumbnail overviews
+- `reader.html` for ordered prev/next viewing inside that folder
+- theme controls for **System**, **Light**, and **Dark**, persisted in `localStorage`
+
+This scales from the generic `page_N/` layout to deep MangaFox trees such as `slug/chapter/page.jpg`.
 
 ### Verbose Mode
 
