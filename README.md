@@ -131,6 +131,16 @@ Each folder with downloaded images gets:
 
 This scales from the generic `page_N/` layout to deep MangaFox trees such as `slug/chapter/page.jpg`.
 
+### Regenerate HTML browser for existing images
+
+If you already have a directory of downloaded images and want to regenerate the HTML browser:
+
+```sh
+argiope library ./images
+```
+
+This is useful if you've manually moved or reorganized images, or want to update the browser UI after an upgrade.
+
 ### Verbose Mode
 
 For detailed progress output while crawling:
@@ -188,6 +198,7 @@ Usage: argiope <command> [options]
 Commands:
   check <url>           Crawl a website and report broken links
   images <url>          Download images from a website
+  library <dir>         Generate HTML browser for an existing directory
 
 Options:
   --depth N             Maximum crawl depth (default: 3)
