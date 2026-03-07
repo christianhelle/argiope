@@ -1,6 +1,6 @@
 title: argiope
 description: Zero-dependency web crawler for link checking, image archiving, and offline HTML browsing
-url: "https://christianhelle.github.io"
+url: "https://christianhelle.com"
 baseurl: "/argiope"
 include:
   - "*.html"
