@@ -117,7 +117,7 @@ pub fn parseChapterList(
             }
             continue;
         };
-        
+
         // Validate that /c is followed by a digit (prevents false positives like "/collection")
         const after_c_pos = c_pos + c_needle.len;
         if (after_c_pos >= href.len or href[after_c_pos] < '0' or href[after_c_pos] > '9') {
@@ -129,10 +129,10 @@ pub fn parseChapterList(
             }
             continue;
         }
-        
+
         const num_start = after_c_pos;
         const rest = href[num_start..];
-        
+
         // Find the end of the chapter number: stop at first '/', '?' or '#'
         const sep_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
 
@@ -145,7 +145,7 @@ pub fn parseChapterList(
         {
             num_end = sep_end - html_suffix.len;
         }
-        
+
         if (num_end == 0) {
             if (verbose and href_count <= 20) {
                 var err_buf: [512]u8 = undefined;
@@ -588,7 +588,6 @@ fn isPlaceholderUrl(url: []const u8) bool {
     }
     return false;
 }
-
 
 /// Build the page URL for a given chapter and page number.
 /// fanfox.net chapter URLs look like: https://fanfox.net/manga/{slug}/c{N}/1.html
@@ -1509,7 +1508,6 @@ test "extractImageUrl curImage variable" {
     try std.testing.expect(url != null);
     try std.testing.expectEqualStrings("https://img.mghcdn.com/manga/naruto/1/1/003.jpg", url.?);
 }
-
 
 test "buildPageUrl" {
     const url = try buildPageUrl(std.testing.allocator, "https://fanfox.net/manga/naruto/c700/1.html", 5);

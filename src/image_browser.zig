@@ -9,7 +9,7 @@ pub fn run(allocator: std.mem.Allocator, output_dir: []const u8) !u8 {
     const summary = generate(allocator, output_dir) catch |err| {
         cli_mod.printError("Failed to generate library");
         if (err == error.FileNotFound) {
-             cli_mod.printError("Directory not found");
+            cli_mod.printError("Directory not found");
         }
         return 1;
     };
@@ -808,7 +808,7 @@ fn writeReaderPage(
     defer allocator.free(overview_href_attr);
     try w.print("<a class=\"button\" href=\"{s}\">Back to overview</a>\n", .{overview_href_attr});
     try w.writeAll("</div>\n</section>\n");
-    
+
     var next_chapter: ?[]const u8 = null;
     var prev_chapter: ?[]const u8 = null;
     var prev_chapter_pages: usize = 0;
@@ -822,23 +822,23 @@ fn writeReaderPage(
                     const next_idx = parent_node.subdirs.items[i + 1];
                     const next_node = tree.nodes.items[next_idx];
                     if (next_node.images.items.len > 0) {
-                         const target = try targetPath(allocator, next_node.rel_path, "reader.html");
-                         defer allocator.free(target);
-                         const href = try relativeLink(allocator, node.rel_path, target);
-                         next_chapter = href;
-                         // Don't free href yet, we need it for printing
+                        const target = try targetPath(allocator, next_node.rel_path, "reader.html");
+                        defer allocator.free(target);
+                        const href = try relativeLink(allocator, node.rel_path, target);
+                        next_chapter = href;
+                        // Don't free href yet, we need it for printing
                     }
                 }
                 if (i > 0) {
                     const prev_idx = parent_node.subdirs.items[i - 1];
                     const prev_node = tree.nodes.items[prev_idx];
                     if (prev_node.images.items.len > 0) {
-                         const target = try targetPath(allocator, prev_node.rel_path, "reader.html");
-                         defer allocator.free(target);
-                         const href = try relativeLink(allocator, node.rel_path, target);
-                         prev_chapter = href;
-                         prev_chapter_pages = prev_node.images.items.len;
-                         // Don't free href yet
+                        const target = try targetPath(allocator, prev_node.rel_path, "reader.html");
+                        defer allocator.free(target);
+                        const href = try relativeLink(allocator, node.rel_path, target);
+                        prev_chapter = href;
+                        prev_chapter_pages = prev_node.images.items.len;
+                        // Don't free href yet
                     }
                 }
                 break;
@@ -912,7 +912,7 @@ fn writeReaderPage(
     } else {
         try w.writeAll("    const prevChapter = null;\n");
     }
-    
+
     try w.writeAll(
         \\    const image = document.getElementById('viewer-image');
         \\    const status = document.getElementById('viewer-status');
