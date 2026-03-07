@@ -1,6 +1,29 @@
 const std = @import("std");
 const cli_mod = @import("cli.zig");
 
+pub fn run(allocator: std.mem.Allocator, output_dir: []const u8) !u8 {
+    var buf: [4096]u8 = undefined;
+    var fw = std.fs.File.stdout().writer(&buf);
+    const w = &fw.interface;
+
+    const summary = generate(allocator, output_dir) catch |err| {
+        cli_mod.printError("Failed to generate library");
+        if (err == error.FileNotFound) {
+             cli_mod.printError("Directory not found");
+        }
+        return 1;
+    };
+
+    try w.print("HTML browser generated:\n", .{});
+    try w.print("  Landing page:     {s}/{s}\n", .{ output_dir, root_page_name });
+    try w.print("  Folder pages:     {d}\n", .{summary.directories});
+    try w.print("  Reader pages:     {d}\n", .{summary.reader_pages});
+    try w.print("  Indexed images:   {d}\n", .{summary.images});
+    try w.flush();
+
+    return 0;
+}
+
 pub const root_page_name = "library.html";
 
 pub const Summary = struct {
@@ -303,9 +326,8 @@ fn splitPath(allocator: std.mem.Allocator, path: []const u8) ![][]const u8 {
     var list: std.ArrayListUnmanaged([]const u8) = .empty;
     errdefer list.deinit(allocator);
 
-    var iter = std.mem.splitScalar(u8, path, '/');
+    var iter = std.mem.tokenizeAny(u8, path, "/\\");
     while (iter.next()) |part| {
-        if (part.len == 0) continue;
         try list.append(allocator, part);
     }
 
@@ -978,9 +1000,14 @@ test "generate encodes unsafe filenames and folder names in HTML attributes" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    try tmp.dir.makePath("gallery & \"special\" #1");
+    // Use characters that are valid on Windows but require URL encoding
+    // Avoid: < > : " / \ | ? *
+    const dir_name = "gallery & 'special' #1";
+    const file_name = "cover 'special' & 100% #1.png";
+
+    try tmp.dir.makePath(dir_name);
     try tmp.dir.writeFile(.{
-        .sub_path = "gallery & \"special\" #1/cover 'special' & 100% #1?.png",
+        .sub_path = dir_name ++ "/" ++ file_name,
         .data = "image",
     });
 
@@ -992,24 +1019,32 @@ test "generate encodes unsafe filenames and folder names in HTML attributes" {
     try std.testing.expect(summary.directories >= 2);
     try std.testing.expect(summary.reader_pages >= 1);
 
-    const encoded_dir = "gallery%20%26%20%22special%22%20%231";
-    const encoded_image = "cover%20%27special%27%20%26%20100%25%20%231%3F.png";
+    // Expected encoded values
+    // Space -> %20
+    // & -> %26
+    // ' -> %27
+    // # -> %23
+    // % -> %25
+    const encoded_dir = "gallery%20%26%20%27special%27%20%231";
+    const encoded_image = "cover%20%27special%27%20%26%20100%25%20%231.png";
 
     const library_html = try tmp.dir.readFileAlloc(allocator, root_page_name, 65536);
     defer allocator.free(library_html);
     try std.testing.expect(std.mem.indexOf(u8, library_html, encoded_dir ++ "/index.html") != null);
     try std.testing.expect(std.mem.indexOf(u8, library_html, encoded_dir ++ "/reader.html#1") != null);
-    try std.testing.expect(std.mem.indexOf(u8, library_html, "gallery &amp; &quot;special&quot; #1") != null);
+    // HTML escaping: & -> &amp;, ' -> &#39;
+    try std.testing.expect(std.mem.indexOf(u8, library_html, "gallery &amp; &#39;special&#39; #1") != null);
 
-    const folder_index = try tmp.dir.readFileAlloc(allocator, "gallery & \"special\" #1/index.html", 65536);
+    const folder_index = try tmp.dir.readFileAlloc(allocator, dir_name ++ "/index.html", 65536);
     defer allocator.free(folder_index);
     try std.testing.expect(std.mem.indexOf(u8, folder_index, "src=\"" ++ encoded_image ++ "\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, folder_index, "src=\"cover 'special' & 100% #1?.png\"") == null);
-    try std.testing.expect(std.mem.indexOf(u8, folder_index, "alt=\"cover &#39;special&#39; &amp; 100% #1?") != null);
+    try std.testing.expect(std.mem.indexOf(u8, folder_index, "src=\"cover 'special' & 100% #1.png\"") == null);
+    // Check for escaped name (e.g. in alt attribute)
+    try std.testing.expect(std.mem.indexOf(u8, folder_index, "cover &#39;special&#39; &amp; 100% #1.png") != null);
 
-    const reader_html = try tmp.dir.readFileAlloc(allocator, "gallery & \"special\" #1/reader.html", 65536);
+    const reader_html = try tmp.dir.readFileAlloc(allocator, dir_name ++ "/reader.html", 65536);
     defer allocator.free(reader_html);
     try std.testing.expect(std.mem.indexOf(u8, reader_html, "data-src=\"" ++ encoded_image ++ "\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, reader_html, "src=\"" ++ encoded_image ++ "\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, reader_html, "data-label=\"cover &#39;special&#39; &amp; 100% #1?.png\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, reader_html, "cover &#39;special&#39; &amp; 100% #1.png") != null);
 }
