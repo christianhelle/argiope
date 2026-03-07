@@ -11,6 +11,7 @@ pub const ReportFormat = enum {
 pub const Command = enum {
     check,
     images,
+    library,
     help,
     version_cmd,
 };
@@ -77,6 +78,8 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
         opts.command = .check;
     } else if (std.mem.eql(u8, cmd_str, "images")) {
         opts.command = .images;
+    } else if (std.mem.eql(u8, cmd_str, "library")) {
+        opts.command = .library;
     } else {
         return ParseError.UnknownCommand;
     }
@@ -166,6 +169,7 @@ pub fn printHelp() !void {
         \\Commands:
         \\  check <url>           Crawl a website and report broken links
         \\  images <url>          Download images and generate an HTML browser
+        \\  library [dir]         Generate an HTML browser for an existing directory
         \\
         \\Options:
         \\  --depth N             Maximum crawl depth (default: 3)
@@ -186,6 +190,7 @@ pub fn printHelp() !void {
         \\  argiope check https://example.com --depth 5 --timeout 15
         \\  argiope images https://example.com/gallery -o ./images  # browse ./images/library.html afterwards
         \\  argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
+        \\  argiope library ./manga
         \\
     , .{version});
     try fw.interface.flush();
