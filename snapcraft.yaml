@@ -3,10 +3,10 @@ base: core22
 version: 0.2.3
 summary: A web crawler for broken-link detection and image downloading
 description: |
-  A high-performance web crawler written in Zig for broken-link detection and image downloading.
+  A high-performance web crawler written for broken-link detection and image downloading.
 
   **Overview:**
-  argiope is a fast, lightweight web crawler designed for broken-link detection, website archiving, and batch image downloading. It features intelligent HTML scanning, URL normalization, and sophisticated report generation. Built with zero external dependencies and compiled to a single static binary, it runs seamlessly across Linux, macOS, and Windows.
+  argiope is a fast, lightweight web crawler designed for broken-link detection, website archiving, and batch image downloading. It features intelligent HTML scanning, URL normalization, and sophisticated report generation. Built with zero external dependencies and compiled to a single static binary.
 
   **Key Features:**
   - Crawl websites and detect broken links (4xx/5xx/timeout errors)
@@ -21,7 +21,6 @@ description: |
   - Parallel crawling support for improved performance on large sites
   - Zero external dependencies — uses only Zig's standard library
   - Single static binary — no runtime, no installation hassles
-  - Cross-platform: Linux, macOS, Windows with identical behavior
 
   **Commands:**
   - `check <url>`: Crawl a website and generate a detailed broken-link report with timing statistics
