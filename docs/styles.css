@@ -222,66 +222,6 @@ kbd {
     align-items: center;
 }
 
-.hero-art {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 140px;
-    margin-bottom: 1rem;
-}
-
-.hero-art::before,
-.hero-art::after {
-    content: "";
-    position: absolute;
-    border-radius: 50%;
-    background: linear-gradient(135deg, rgba(189, 111, 47, 0.18), rgba(45, 127, 116, 0.14));
-    filter: blur(2px);
-}
-
-.hero-art::before {
-    width: 160px;
-    height: 160px;
-}
-
-.hero-art::after {
-    width: 220px;
-    height: 220px;
-    opacity: 0.45;
-}
-
-.hero-art img {
-    position: relative;
-    width: clamp(88px, 14vw, 128px);
-    height: clamp(88px, 14vw, 128px);
-    object-fit: cover;
-    border-radius: 30px;
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    box-shadow: 0 18px 42px rgba(28, 30, 23, 0.18);
-}
-
-.hero-art.compact {
-    min-height: 110px;
-    margin-bottom: 0.8rem;
-}
-
-.hero-art.compact::before {
-    width: 120px;
-    height: 120px;
-}
-
-.hero-art.compact::after {
-    width: 170px;
-    height: 170px;
-}
-
-.hero-art.compact img {
-    width: 72px;
-    height: 72px;
-    border-radius: 22px;
-}
-
 .eyebrow {
     display: inline-flex;
     align-items: center;
