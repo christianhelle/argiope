@@ -5,6 +5,7 @@ const html_mod = @import("html.zig");
 const url_mod = @import("url.zig");
 const cli_mod = @import("cli.zig");
 const mangafox_mod = @import("mangafox.zig");
+const image_browser_mod = @import("image_browser.zig");
 
 pub const DownloadResult = struct {
     total_pages: usize,
@@ -205,6 +206,13 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     try w.print("  Skipped:          {d}\n", .{result.skipped});
     try w.print("\nTiming:\n", .{});
     try w.print("  Total crawl time: {d}ms\n", .{crawl_elapsed_ms});
+
+    const browser_summary = try image_browser_mod.generate(allocator, opts.output_dir);
+    try w.print("\nHTML browser:\n", .{});
+    try w.print("  Landing page:     {s}/{s}\n", .{ opts.output_dir, image_browser_mod.root_page_name });
+    try w.print("  Folder pages:     {d}\n", .{browser_summary.directories});
+    try w.print("  Reader pages:     {d}\n", .{browser_summary.reader_pages});
+    try w.print("  Indexed images:   {d}\n", .{browser_summary.images});
     try w.flush();
 
     return 0;

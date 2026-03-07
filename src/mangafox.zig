@@ -1,6 +1,7 @@
 const std = @import("std");
 const http_mod = @import("http.zig");
 const cli_mod = @import("cli.zig");
+const image_browser_mod = @import("image_browser.zig");
 
 /// Browser-like User-Agent so CDNs don't reject us as a bot.
 const user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
@@ -891,6 +892,13 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     }
 
     try w.print("\nDone. Downloaded: {d}  Failed: {d}\n", .{ total_downloaded, total_failed });
+
+    const browser_summary = try image_browser_mod.generate(allocator, opts.output_dir);
+    try w.print("HTML browser:\n", .{});
+    try w.print("  Landing page:   {s}/{s}\n", .{ opts.output_dir, image_browser_mod.root_page_name });
+    try w.print("  Folder pages:   {d}\n", .{browser_summary.directories});
+    try w.print("  Reader pages:   {d}\n", .{browser_summary.reader_pages});
+    try w.print("  Indexed images: {d}\n", .{browser_summary.images});
     try w.flush();
 
     return 0;

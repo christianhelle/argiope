@@ -15,16 +15,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Update snapcraft.yaml version
+      - name: Update release versions
         run: |
           sed -i "s/^version: .*/version: ${{ env.VERSION }}/" snapcraft.yaml
+          sed -i "s/^pub const version = \".*\";$/pub const version = \"${{ env.VERSION }}\";/" src/cli.zig
 
       - name: Commit, tag, and push
         run: |
           git config --global user.name "Continuous Integration"
           git config --global user.email "username@users.noreply.github.com"
-          git add snapcraft.yaml
-          git commit -m "Bump up snapcraft version to v${{ env.VERSION }}"
+          git add snapcraft.yaml src/cli.zig
+          git commit -m "Bump release version to v${{ env.VERSION }}"
           git push origin HEAD:main
 
   build:

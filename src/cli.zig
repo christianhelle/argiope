@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const version = "0.1.0";
+pub const version = "0.1.2";
 
 pub const ReportFormat = enum {
     text,
@@ -165,7 +165,7 @@ pub fn printHelp() !void {
         \\
         \\Commands:
         \\  check <url>           Crawl a website and report broken links
-        \\  images <url>          Download images from a website
+        \\  images <url>          Download images and generate an HTML browser
         \\
         \\Options:
         \\  --depth N             Maximum crawl depth (default: 3)
@@ -184,7 +184,7 @@ pub fn printHelp() !void {
         \\Examples:
         \\  argiope check https://example.com
         \\  argiope check https://example.com --depth 5 --timeout 15
-        \\  argiope images https://example.com/gallery -o ./images
+        \\  argiope images https://example.com/gallery -o ./images  # browse ./images/library.html afterwards
         \\  argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
         \\
     , .{version});
