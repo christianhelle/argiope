@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const version = "0.1.2";
+pub const version = "0.2.2";
 
 pub const ReportFormat = enum {
     text,
