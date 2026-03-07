@@ -25,34 +25,6 @@ make build                         # alternative via Makefile
 make test
 ```
 
-## Architecture
-
-All source files live flat in `src/`. The data flow is:
-
-```
-main.zig  →  cli.zig  →  crawler.zig  →  http.zig
-                              ↓              ↓
-                         html.zig       url.zig
-                              ↓
-                    link_checker.zig  (check mode)
-                    downloader.zig   (download mode)
-                              ↓
-                    image_browser.zig (HTML browse output)
-```
-
-| File               | Responsibility                                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `main.zig`         | Entry point; owns `GeneralPurposeAllocator`; wires modules together                                     |
-| `cli.zig`          | CLI argument parsing for `check` and `download` subcommands                                             |
-| `url.zig`          | URL parsing (wraps `std.Uri`), normalization, relative-to-absolute resolution, same-origin              |
-| `http.zig`         | HTTP client wrapper using `std.http.Client` with `request/sendBodiless/receiveHead/reader`              |
-| `html.zig`         | HTML scanner: extracts `<a href>`, `<img src>`, `<link href>`, `<script src>`, `<iframe src>`, `srcset` |
-| `crawler.zig`      | BFS crawl engine: visited `StringHashMap`, depth limiting, domain restriction, rate limiting            |
-| `link_checker.zig` | Broken link reporter: collects URLs, checks status, writes console output or delegates to report.zig |
-| `report.zig`       | Report generator: writes text, Markdown, or HTML reports from crawl results                          |
-| `downloader.zig`   | Image downloader: saves images to disk, then triggers HTML browse page generation                    |
-| `image_browser.zig` | Filesystem-based HTML browser generator for generic and manga download trees                          |
-
 ## Zig 0.15 API Notes
 
 These are critical differences from older Zig versions:
