@@ -6,6 +6,8 @@
 
 **Keep README in sync:** After every feature addition, change, or bug fix, update `README.md` to reflect the current state of the application. This must be done automatically — do not wait to be asked. Update usage examples, the options reference, feature lists, and architecture notes as needed. The README is the source of truth for users.
 
+**Keep the description in snapcraft.yaml in sync**: Similar to the README requirement, except that the snapcraft description is limited to 4096 characters.
+
 **Commits:** Make commits in small logical chunks automatically — do not wait to be asked.
 
 - Use brief commit messages (one line only).
