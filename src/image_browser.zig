@@ -425,7 +425,7 @@ fn writePageStart(w: anytype, title: []const u8) !void {
         \\  a { color: var(--accent); text-decoration: none; }
         \\  a:hover { color: var(--accent-strong); }
         \\  img { display: block; max-width: 100%; }
-        \\  .shell { max-width: 1200px; margin: 0 auto; padding: 32px 20px 48px; }
+        \\  .shell { margin: 0 auto; padding: 32px 20px 48px; }
         \\  .hero {
         \\    background: linear-gradient(180deg, var(--surface), var(--surface-alt));
         \\    border: 1px solid var(--border);
