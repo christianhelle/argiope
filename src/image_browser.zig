@@ -425,7 +425,7 @@ fn writePageStart(w: anytype, title: []const u8) !void {
         \\  a { color: var(--accent); text-decoration: none; }
         \\  a:hover { color: var(--accent-strong); }
         \\  img { display: block; max-width: 100%; }
-        \\  .shell { max-width: 1200px; margin: 0 auto; padding: 32px 20px 48px; }
+        \\  .shell { margin: 0 auto; padding: 32px 20px 48px; }
         \\  .hero {
         \\    background: linear-gradient(180deg, var(--surface), var(--surface-alt));
         \\    border: 1px solid var(--border);
@@ -528,7 +528,7 @@ fn writePageStart(w: anytype, title: []const u8) !void {
         \\    justify-content: center;
         \\    min-height: 280px;
         \\  }
-        \\  .viewer-frame img { max-height: 80vh; object-fit: contain; }
+        \\  .viewer-frame img { object-fit: contains; }
         \\  .viewer-controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; margin-top: 16px; }
         \\  .viewer-nav { display: flex; gap: 8px; flex-wrap: wrap; }
         \\  .viewer-status { color: var(--muted); font-weight: 600; }
