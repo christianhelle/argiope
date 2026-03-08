@@ -528,7 +528,7 @@ fn writePageStart(w: anytype, title: []const u8) !void {
         \\    justify-content: center;
         \\    min-height: 280px;
         \\  }
-        \\  .viewer-frame img { object-fit: fill; }
+        \\  .viewer-frame img { object-fit: contains; }
         \\  .viewer-controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; margin-top: 16px; }
         \\  .viewer-nav { display: flex; gap: 8px; flex-wrap: wrap; }
         \\  .viewer-status { color: var(--muted); font-weight: 600; }
