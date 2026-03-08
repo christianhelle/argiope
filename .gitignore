@@ -8,3 +8,8 @@ stage/bin
 /manga
 /report.*
 /download
+
+
+# Added by cargo
+
+/target

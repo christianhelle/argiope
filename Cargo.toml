@@ -1,0 +1,13 @@
+[package]
+name = "argiope"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.4", features = ["derive"] }
+tokio = { version = "1.37.0", features = ["full"] }
+reqwest = { version = "0.12.3", features = ["json"] }
+scraper = "0.19.0"
+anyhow = "1.0.81"
+futures = "0.3.30"
+url = "2.5.0"
