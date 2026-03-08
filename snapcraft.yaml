@@ -1,6 +1,6 @@
 name: argiope
 base: core22
-version: 0.2.3
+version: 0.2.4
 summary: A web crawler for broken-link detection and image downloading
 description: |
   A high-performance web crawler written for broken-link detection and image downloading.
