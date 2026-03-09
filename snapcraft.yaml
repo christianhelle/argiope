@@ -1,7 +1,23 @@
 name: argiope
 base: core22
 version: 0.2.4
+title: Argiope
 summary: A web crawler for broken-link detection and image downloading
+license: MIT
+source-code:
+  - https://github.com/christianhelle/argiope
+website:
+  - https://christianhelle.com/argiope
+  - https://github.com/christianhelle/argiope
+contact:
+  - https://christianhelle.com
+  - https://github.com/christianhelle
+issues:
+  - https://github.com/christianhelle/argiope/issues
+donation:
+  - https://paypal.me/christianhelle
+  - https://buymeacoffee.com/christianhelle
+  - https://github.com/sponsors/christianhelle
 description: |
   A high-performance web crawler written for broken-link detection and image downloading.
 
