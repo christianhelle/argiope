@@ -55,6 +55,13 @@ fn isMetadataFile(name: []const u8) bool {
     return std.mem.eql(u8, name, metadata_filename);
 }
 
+fn hexVal(b: u8) ?u32 {
+    if (b >= '0' and b <= '9') return @intCast(b - '0');
+    if (b >= 'a' and b <= 'f') return @intCast(10 + (b - 'a'));
+    if (b >= 'A' and b <= 'F') return @intCast(10 + (b - 'A'));
+    return null;
+}
+
 fn readMetadataFile(allocator: std.mem.Allocator, root_dir: std.fs.Dir, rel_path: []const u8) !?MangaMetadata {
     const meta_path = if (rel_path.len == 0)
         metadata_filename
@@ -62,41 +69,204 @@ fn readMetadataFile(allocator: std.mem.Allocator, root_dir: std.fs.Dir, rel_path
         try std.fmt.allocPrint(allocator, "{s}/{s}", .{ rel_path, metadata_filename });
     defer if (rel_path.len != 0) allocator.free(meta_path);
 
-    const file = root_dir.openFile(meta_path, .{}) catch return null;
-    defer file.close();
-
-    const data = file.readToEndAlloc(allocator, 65536) catch return null;
+    const data = root_dir.readFileAlloc(allocator, meta_path, 65536) catch return null;
     defer allocator.free(data);
 
-    const slug = extractJsonString(data, "slug") orelse return null;
-    const title = extractJsonString(data, "title") orelse return null;
-
-    const slug_copy = try allocator.dupe(u8, slug);
-    errdefer allocator.free(slug_copy);
-    const title_copy = try allocator.dupe(u8, title);
-    errdefer allocator.free(title_copy);
+    // Extract and allocate unescaped strings directly from the metadata file
+    const slug = extractJsonString(allocator, data, "slug") orelse return null;
+    const title = extractJsonString(allocator, data, "title") orelse {
+        allocator.free(slug);
+        return null;
+    };
 
     var synopsis: ?[]const u8 = null;
-    if (extractJsonString(data, "synopsis")) |syn| {
-        synopsis = try allocator.dupe(u8, syn);
+    if (extractJsonString(allocator, data, "synopsis")) |syn| {
+        synopsis = syn;
     }
 
     return MangaMetadata{
-        .slug = slug_copy,
-        .title = title_copy,
+        .slug = slug,
+        .title = title,
         .synopsis = synopsis,
     };
 }
 
-fn extractJsonString(data: []const u8, key: []const u8) ?[]const u8 {
+fn extractJsonString(allocator: std.mem.Allocator, data: []const u8, key: []const u8) ?[]const u8 {
+    // Build search pattern: "key": "
     var search_buf: [128]u8 = undefined;
     const key_pattern = std.fmt.bufPrint(&search_buf, "\"{s}\": \"", .{key}) catch return null;
-    if (std.mem.indexOf(u8, data, key_pattern)) |pos| {
-        const start = pos + key_pattern.len;
-        const end = std.mem.indexOfScalarPos(u8, data, start, '"') orelse return null;
-        return data[start..end];
+    const pos = std.mem.indexOf(u8, data, key_pattern) orelse return null;
+    const start = pos + key_pattern.len;
+
+    // Find the closing quote that is not escaped (an odd number of preceding backslashes means escaped)
+    var i: usize = start;
+    var end: ?usize = null;
+    while (i < data.len) {
+        if (data[i] == '"') {
+            // Count backslashes immediately preceding this quote
+            var j: usize = i;
+            var backslashes: usize = 0;
+            while (j > start) : (j -= 1) {
+                if (data[j - 1] == '\\') {
+                    backslashes += 1;
+                } else {
+                    break;
+                }
+            }
+            if ((backslashes & 1) == 0) {
+                end = i;
+                break;
+            }
+        }
+        i += 1;
     }
-    return null;
+    if (end == null) return null;
+    const src = data[start..end.?];
+
+    // Allocate output buffer. Decoded length will be <= src.len, so src.len is safe upper bound.
+    const out = allocator.alloc(u8, src.len) catch return null;
+    var out_idx: usize = 0;
+
+    var k: usize = 0;
+    while (k < src.len) {
+        if (src[k] == '\\') {
+            // Escape sequence
+            if (k + 1 >= src.len) {
+                allocator.free(out);
+                return null;
+            }
+            const esc = src[k + 1];
+            switch (esc) {
+                '"' => {
+                    out[out_idx] = '"';
+                    out_idx += 1;
+                    k += 2;
+                },
+                '\\' => {
+                    out[out_idx] = '\\';
+                    out_idx += 1;
+                    k += 2;
+                },
+                '/' => {
+                    out[out_idx] = '/';
+                    out_idx += 1;
+                    k += 2;
+                },
+                'b' => {
+                    out[out_idx] = 0x08;
+                    out_idx += 1;
+                    k += 2;
+                },
+                'f' => {
+                    out[out_idx] = 0x0C;
+                    out_idx += 1;
+                    k += 2;
+                },
+                'n' => {
+                    out[out_idx] = 0x0A;
+                    out_idx += 1;
+                    k += 2;
+                },
+                'r' => {
+                    out[out_idx] = 0x0D;
+                    out_idx += 1;
+                    k += 2;
+                },
+                't' => {
+                    out[out_idx] = 0x09;
+                    out_idx += 1;
+                    k += 2;
+                },
+                'u' => {
+                    // \\uXXXX - need 4 hex digits
+                    if (k + 6 > src.len) {
+                        allocator.free(out);
+                        return null;
+                    }
+                    var v: u32 = 0;
+                    const p: usize = k + 2;
+                    var idx: usize = 0;
+                    while (idx < 4) {
+                        const hv = hexVal(src[p + idx]) orelse {
+                            allocator.free(out);
+                            return null;
+                        };
+                        v = (v << 4) | hv;
+                        idx += 1;
+                    }
+                    // Handle surrogate pairs
+                    if (v >= 0xD800 and v <= 0xDBFF) {
+                        // Expect a following \uXXXX
+                        if (k + 12 > src.len or src[k + 6] != '\\' or src[k + 7] != 'u') {
+                            allocator.free(out);
+                            return null;
+                        }
+                        var v2: u32 = 0;
+                        const p2: usize = k + 8;
+                        idx = 0;
+                        while (idx < 4) {
+                            const hv2 = hexVal(src[p2 + idx]) orelse {
+                                allocator.free(out);
+                                return null;
+                            };
+                            v2 = (v2 << 4) | hv2;
+                            idx += 1;
+                        }
+                        if (!(v2 >= 0xDC00 and v2 <= 0xDFFF)) {
+                            allocator.free(out);
+                            return null;
+                        }
+                        const codepoint: u32 = 0x10000 + (((v - 0xD800) << 10) | (v2 - 0xDC00));
+                        // Encode as UTF-8
+                        if (codepoint <= 0xFFFF) {
+                            // shouldn't happen for surrogate pair, but handle
+                            out[out_idx] = @intCast(codepoint);
+                            out_idx += 1;
+                        } else if (codepoint <= 0x1FFFFF) {
+                            out[out_idx] = @intCast(0xF0 | ((codepoint >> 18) & 0x07));
+                            out[out_idx + 1] = @intCast(0x80 | ((codepoint >> 12) & 0x3F));
+                            out[out_idx + 2] = @intCast(0x80 | ((codepoint >> 6) & 0x3F));
+                            out[out_idx + 3] = @intCast(0x80 | (codepoint & 0x3F));
+                            out_idx += 4;
+                        }
+                        k += 12; // consumed two \uXXXX sequences
+                    } else {
+                        const codepoint: u32 = v;
+                        if (codepoint <= 0x7F) {
+                            out[out_idx] = @intCast(codepoint);
+                            out_idx += 1;
+                        } else if (codepoint <= 0x7FF) {
+                            out[out_idx] = @intCast(0xC0 | ((codepoint >> 6) & 0x1F));
+                            out[out_idx + 1] = @intCast(0x80 | (codepoint & 0x3F));
+                            out_idx += 2;
+                        } else {
+                            out[out_idx] = @intCast(0xE0 | ((codepoint >> 12) & 0x0F));
+                            out[out_idx + 1] = @intCast(0x80 | ((codepoint >> 6) & 0x3F));
+                            out[out_idx + 2] = @intCast(0x80 | (codepoint & 0x3F));
+                            out_idx += 3;
+                        }
+                        k += 6;
+                    }
+                },
+                else => {
+                    // Unknown escape
+                    allocator.free(out);
+                    return null;
+                },
+            }
+        } else {
+            out[out_idx] = src[k];
+            out_idx += 1;
+            k += 1;
+        }
+    }
+
+    // Shrink returned slice if necessary
+    if (out_idx != out.len) {
+        const final_buf = allocator.realloc(out, out_idx) catch return null;
+        return final_buf[0..out_idx];
+    }
+    return out[0..out_idx];
 }
 
 fn findNearestMetadata(tree: *const SiteTree, index: usize) ?*const MangaMetadata {
@@ -910,7 +1080,7 @@ fn writeReaderPage(
     } else {
         try w.writeAll("<h1>Reader</h1>\n");
     }
-    try w.print("<p>{s}</p>\n</div>\n", .{escaped_subtitle});
+    try w.print("<p>{s}</p>\n", .{escaped_subtitle});
     if (metadata) |m| {
         if (m.synopsis) |syn| {
             const escaped_syn = try escapeHtml(allocator, syn);
@@ -918,8 +1088,9 @@ fn writeReaderPage(
             try w.print("<p class=\"synopsis\">{s}</p>\n", .{escaped_syn});
         }
     }
+    try w.writeAll("</div>\n");
     try writeThemeControls(w);
-    try w.writeAll("</div>\n<div class=\"actions\">\n");
+    try w.writeAll("<div class=\"actions\">\n");
     const overview_file = if (index == 0) root_page_name else "index.html";
     const overview_href_attr = try encodeRelativeUrlAttribute(allocator, overview_file);
     defer allocator.free(overview_href_attr);
