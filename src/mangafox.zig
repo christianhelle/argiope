@@ -33,9 +33,23 @@ fn metadataFilePath(allocator: std.mem.Allocator, output_dir: []const u8, slug: 
     return std.fmt.allocPrint(allocator, "{s}/{s}/{s}", .{ output_dir, slug, metadata_filename });
 }
 
+fn eqIgnoreAscii(a: []const u8, b: []const u8) bool {
+    if (a.len != b.len) return false;
+    var i: usize = 0;
+    while (i < a.len) : (i += 1) {
+        var ca = a[i];
+        var cb = b[i];
+        if (ca >= 'A' and ca <= 'Z') ca += 32;
+        if (cb >= 'A' and cb <= 'Z') cb += 32;
+        if (ca != cb) return false;
+    }
+    return true;
+}
+
 fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
     const class_needle = "class=\"";
     var search_start: usize = 0;
+
 
     while (std.mem.indexOf(u8, html[search_start..], class_needle)) |class_pos| {
         const pos = search_start + class_pos;
@@ -73,19 +87,50 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
         const tag_end = std.mem.indexOfScalar(u8, tag_content, '>') orelse continue;
         const content_start = tag_start + tag_end + 1;
 
-        // Find the closing tag
-        const search_content = html[content_start..];
+        // Extract the tag name from the opening tag
+        const name_start = tag_start + 1;
+        var name_end = name_start;
+        while (name_end < html.len) : (name_end += 1) {
+            const c = html[name_end];
+            if (c == ' ' or c == '>' or c == '/') break;
+        }
+        const tag_name = html[name_start..name_end];
 
-        // Simple approach: find the next < and check if it's a closing tag
+
+        // Now scan content while tracking depth for nested tags with the same name
+        const search_content = html[content_start..];
+        var depth: usize = 1;
         var i: usize = 0;
         while (i < search_content.len) {
             if (search_content[i] == '<') {
-                if (i + 1 < search_content.len and search_content[i + 1] == '/') {
-                    // Found closing tag
-                    return search_content[0..i];
+                if (i + 1 < search_content.len and search_content[i + 1] == '!') {
+                    // Skip comments/doctype
+                    const skip_end = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
+                    i = skip_end + 1;
+                    continue;
                 }
-                // Skip to end of this tag
+                const is_closing = (i + 1 < search_content.len and search_content[i + 1] == '/');
                 const tag_end_pos = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
+                // Extract candidate tag name
+                var tn_start = i + 1;
+                if (is_closing) tn_start += 1;
+                var tn_end = tn_start;
+                while (tn_end < tag_end_pos + i + 1) : (tn_end += 1) {
+                    const c = search_content[tn_end];
+                    if (c == ' ' or c == '>' or c == '/') break;
+                }
+                const candidate = search_content[tn_start..tn_end];
+                if (eqIgnoreAscii(candidate, tag_name)) {
+                    if (is_closing) {
+                        if (depth == 1) {
+                            return search_content[0..i];
+                        } else {
+                            depth -= 1;
+                        }
+                    } else {
+                        depth += 1;
+                    }
+                }
                 i = tag_end_pos + 1;
             } else {
                 i += 1;
@@ -986,16 +1031,15 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
 
         const cwd = std.fs.cwd();
         const meta_dir = std.fs.path.dirname(meta_path) orelse opts.output_dir;
-        cwd.makePath(meta_dir) catch {};
-        const meta_file = cwd.createFile(meta_path, .{ .truncate = true }) catch null;
-        if (meta_file) |f| {
-            defer f.close();
-            const json = writeMetadataJson(allocator, meta) catch null;
-            if (json) |j| {
-                defer allocator.free(j);
-                f.writeAll(j) catch {};
-            }
-        }
+        // Ensure directory exists; propagate error if creation fails
+        try cwd.makePath(meta_dir);
+
+        const f = try cwd.createFile(meta_path, .{ .truncate = true });
+        defer f.close();
+
+        const j = try writeMetadataJson(allocator, meta);
+        defer allocator.free(j);
+        try f.writeAll(j);
     }
 
     const all_chapters = if (rss_chapters.len > 0) rss_chapters else html_chapters;
