@@ -37,6 +37,82 @@ const ImageEntry = struct {
     rel_path: []const u8,
 };
 
+pub const MangaMetadata = struct {
+    slug: []const u8,
+    title: []const u8,
+    synopsis: ?[]const u8 = null,
+
+    pub fn deinit(self: *MangaMetadata, allocator: std.mem.Allocator) void {
+        allocator.free(self.slug);
+        allocator.free(self.title);
+        if (self.synopsis) |s| allocator.free(s);
+    }
+};
+
+const metadata_filename = ".argiope-metadata.json";
+
+fn isMetadataFile(name: []const u8) bool {
+    return std.mem.eql(u8, name, metadata_filename);
+}
+
+fn readMetadataFile(allocator: std.mem.Allocator, root_dir: std.fs.Dir, rel_path: []const u8) !?MangaMetadata {
+    const meta_path = if (rel_path.len == 0)
+        metadata_filename
+    else
+        try std.fmt.allocPrint(allocator, "{s}/{s}", .{ rel_path, metadata_filename });
+    defer if (rel_path.len != 0) allocator.free(meta_path);
+
+    const file = root_dir.openFile(meta_path, .{}) catch return null;
+    defer file.close();
+
+    const data = file.readToEndAlloc(allocator, 65536) catch return null;
+    defer allocator.free(data);
+
+    const slug = extractJsonString(data, "slug") orelse return null;
+    const title = extractJsonString(data, "title") orelse return null;
+
+    const slug_copy = try allocator.dupe(u8, slug);
+    errdefer allocator.free(slug_copy);
+    const title_copy = try allocator.dupe(u8, title);
+    errdefer allocator.free(title_copy);
+
+    var synopsis: ?[]const u8 = null;
+    if (extractJsonString(data, "synopsis")) |syn| {
+        synopsis = try allocator.dupe(u8, syn);
+    }
+
+    return MangaMetadata{
+        .slug = slug_copy,
+        .title = title_copy,
+        .synopsis = synopsis,
+    };
+}
+
+fn extractJsonString(data: []const u8, key: []const u8) ?[]const u8 {
+    var search_buf: [128]u8 = undefined;
+    const key_pattern = std.fmt.bufPrint(&search_buf, "\"{s}\": \"", .{key}) catch return null;
+    if (std.mem.indexOf(u8, data, key_pattern)) |pos| {
+        const start = pos + key_pattern.len;
+        const end = std.mem.indexOfScalarPos(u8, data, start, '"') orelse return null;
+        return data[start..end];
+    }
+    return null;
+}
+
+fn findNearestMetadata(tree: *const SiteTree, index: usize) ?*const MangaMetadata {
+    var current = index;
+    while (true) {
+        const node = &tree.nodes.items[current];
+        if (node.metadata) |m| return m;
+        if (node.parent) |p| {
+            current = p;
+        } else {
+            break;
+        }
+    }
+    return null;
+}
+
 const DirNode = struct {
     name: []const u8,
     rel_path: []const u8,
@@ -44,6 +120,7 @@ const DirNode = struct {
     subdirs: std.ArrayListUnmanaged(usize) = .empty,
     images: std.ArrayListUnmanaged(ImageEntry) = .empty,
     total_images: usize = 0,
+    metadata: ?*MangaMetadata = null,
 
     fn deinit(self: *DirNode, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
@@ -54,6 +131,12 @@ const DirNode = struct {
         }
         self.images.deinit(allocator);
         self.subdirs.deinit(allocator);
+        if (self.metadata) |m| {
+            allocator.free(m.slug);
+            allocator.free(m.title);
+            if (m.synopsis) |s| allocator.free(s);
+            allocator.destroy(m);
+        }
     }
 };
 
@@ -166,8 +249,25 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
     while (try walker.next()) |entry| {
         switch (entry.kind) {
             .directory => _ = try tree.getOrAddDir(entry.path),
-            .file => if (isImagePath(entry.basename)) try tree.addImage(entry.path),
+            .file => {
+                if (isMetadataFile(entry.basename)) {
+                    // handled after tree is built
+                } else if (isImagePath(entry.basename)) {
+                    try tree.addImage(entry.path);
+                }
+            },
             else => {},
+        }
+    }
+
+    // After walking, load metadata for each directory
+    for (tree.nodes.items, 0..) |_, idx| {
+        const node = &tree.nodes.items[idx];
+        const meta_result = readMetadataFile(allocator, root_dir, node.rel_path) catch continue;
+        if (meta_result) |meta| {
+            const meta_ptr = allocator.create(MangaMetadata) catch continue;
+            meta_ptr.* = meta;
+            node.metadata = meta_ptr;
         }
     }
 
@@ -493,6 +593,7 @@ fn writePageStart(w: anytype, title: []const u8) !void {
         \\  .thumb-meta strong { display: block; margin-bottom: 4px; }
         \\  .thumb-meta span { color: var(--muted); font-size: 0.92rem; }
         \\  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0 0; }
+        \\  .synopsis { margin-top: 12px; color: var(--muted); line-height: 1.5; font-size: 0.95rem; }
         \\  .button {
         \\    display: inline-flex;
         \\    align-items: center;
@@ -782,14 +883,18 @@ fn writeReaderPage(
     var fw = file.writer(&buffer);
     const w = &fw.interface;
 
-    const title = if (index == 0)
+    const metadata = findNearestMetadata(tree, index);
+
+    const page_title = if (metadata) |m|
+        try std.fmt.allocPrint(allocator, "Reader — {s}", .{m.title})
+    else if (index == 0)
         try std.fmt.allocPrint(allocator, "Reader — {s}", .{output_dir})
     else
         try std.fmt.allocPrint(allocator, "Reader — {s}", .{node.name});
-    defer allocator.free(title);
-    const escaped_title = try escapeHtml(allocator, title);
-    defer allocator.free(escaped_title);
-    try writePageStart(w, escaped_title);
+    defer allocator.free(page_title);
+    const escaped_page_title = try escapeHtml(allocator, page_title);
+    defer allocator.free(escaped_page_title);
+    try writePageStart(w, escaped_page_title);
 
     const subtitle = if (index == 0)
         try std.fmt.allocPrint(allocator, "Reader mode for downloads stored in {s}.", .{output_dir})
@@ -799,8 +904,22 @@ fn writeReaderPage(
     const escaped_subtitle = try escapeHtml(allocator, subtitle);
     defer allocator.free(escaped_subtitle);
 
-    try w.writeAll("<section class=\"hero\">\n<div class=\"hero-top\">\n<div>\n<h1>Reader</h1>\n");
-    try w.print("<p>{s}</p>\n</div>\n", .{escaped_subtitle});
+    try w.writeAll("<section class=\"hero\">\n<div class=\"hero-top\">\n<div>\n");
+    if (metadata) |m| {
+        const escaped_mtitle = try escapeHtml(allocator, m.title);
+        defer allocator.free(escaped_mtitle);
+        try w.print("<h1>{s}</h1>\n", .{escaped_mtitle});
+    } else {
+        try w.writeAll("<h1>Reader</h1>\n");
+    }
+    try w.print("<p>{s}</p>\n", .{escaped_subtitle});
+    if (metadata) |m| {
+        if (m.synopsis) |syn| {
+            const escaped_syn = try escapeHtml(allocator, syn);
+            defer allocator.free(escaped_syn);
+            try w.print("<p class=\"synopsis\">{s}</p>\n", .{escaped_syn});
+        }
+    }
     try writeThemeControls(w);
     try w.writeAll("</div>\n<div class=\"actions\">\n");
     const overview_file = if (index == 0) root_page_name else "index.html";
