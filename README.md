@@ -107,6 +107,8 @@ argiope images https://fanfox.net/manga/naruto --chapters 1-10 -o ./manga
 
 **Chapter ordering:** Chapters are always downloaded in numeric order (1, 2, 10, 11, 100), not alphabetic order. Decimal chapter numbers (e.g., 5.5, 100.1) are fully supported and sorted correctly between their integer neighbors.
 
+**Manga metadata:** When downloading from MangaFox, argiope extracts the manga title and synopsis from the manga page and persists them to a hidden `.argiope-metadata.json` file in the manga folder. The generated `reader.html` pages display this title and synopsis, giving context to each chapter. The metadata persists across `argiope library` regeneration, so you can re-generate the HTML browser later without re-fetching from MangaFox.
+
 **Troubleshooting:** If chapters are missing or not detected, use `--verbose` to see detailed chapter discovery information:
 
 ```sh
