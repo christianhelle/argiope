@@ -12,6 +12,157 @@ pub const MangafoxChapter = struct {
     url: []const u8, // absolute URL to page 1 of the chapter
 };
 
+/// Manga metadata extracted from the manga landing page.
+pub const MangaMetadata = struct {
+    version: u32 = 1,
+    source: []const u8 = "mangafox",
+    slug: []const u8,
+    title: []const u8,
+    synopsis: ?[]const u8 = null,
+
+    pub fn deinit(self: *MangaMetadata, allocator: std.mem.Allocator) void {
+        allocator.free(self.slug);
+        allocator.free(self.title);
+        if (self.synopsis) |s| allocator.free(s);
+    }
+};
+
+const metadata_filename = ".argiope-metadata.json";
+
+fn metadataFilePath(allocator: std.mem.Allocator, output_dir: []const u8, slug: []const u8) ![]u8 {
+    return std.fmt.allocPrint(allocator, "{s}/{s}/{s}", .{ output_dir, slug, metadata_filename });
+}
+
+fn findElementByClass(allocator: std.mem.Allocator, html: []const u8, class_name: []const u8) !?[]const u8 {
+    const class_needle = try std.fmt.allocPrint(allocator, "class=\"{s}\"", .{class_name});
+    defer allocator.free(class_needle);
+    if (std.mem.indexOf(u8, html, class_needle)) |pos| {
+        const tag_start = std.mem.lastIndexOf(u8, html[0..pos], "<") orelse {
+            if (pos == 0) return null;
+            return null;
+        };
+        if (tag_start == 0 or html[tag_start - 1] != '<') return null;
+        const tag_end = std.mem.indexOfScalarPos(u8, html, pos + class_needle.len, '>') orelse return null;
+        const content_start = tag_end + 1;
+        const close_tag = "</";
+        const content_end = std.mem.indexOf(u8, html[content_start..], close_tag) orelse return null;
+        return html[content_start .. content_start + content_end];
+    }
+    return null;
+}
+
+fn extractTextContent(html: []const u8) []const u8 {
+    var i: usize = 0;
+    while (i < html.len) {
+        if (html[i] == '<') {
+            const close = std.mem.indexOfScalarPos(u8, html, i, '>') orelse break;
+            i = close + 1;
+        } else {
+            i += 1;
+        }
+    }
+    return html[0..i];
+}
+
+fn normalizeWhitespace(text: []const u8, allocator: std.mem.Allocator) ![]u8 {
+    var result: std.ArrayListUnmanaged(u8) = .empty;
+    defer result.deinit(allocator);
+    var in_whitespace = false;
+    for (text) |c| {
+        if (c == ' ' or c == '\t' or c == '\n' or c == '\r') {
+            if (!in_whitespace and result.items.len > 0) {
+                try result.append(allocator, ' ');
+                in_whitespace = true;
+            }
+        } else {
+            try result.append(allocator, c);
+            in_whitespace = false;
+        }
+    }
+    while (result.items.len > 0 and result.items[result.items.len - 1] == ' ') {
+        result.items.len -= 1;
+    }
+    return result.toOwnedSlice(allocator);
+}
+
+pub fn parseMangaMetadata(
+    allocator: std.mem.Allocator,
+    html: []const u8,
+    slug: []const u8,
+) !MangaMetadata {
+    var title: []const u8 = slug;
+    var synopsis: ?[]const u8 = null;
+
+    if (try findElementByClass(allocator, html, "detail-info-right-title-font")) |title_elem| {
+        const extracted = extractTextContent(title_elem);
+        const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
+        if (trimmed.len > 0) {
+            title = try allocator.dupe(u8, trimmed);
+        }
+    }
+
+    if (synopsis == null) {
+        if (try findElementByClass(allocator, html, "fullcontent")) |synopsis_elem| {
+            const extracted = extractTextContent(synopsis_elem);
+            const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
+            if (trimmed.len > 0) {
+                synopsis = try normalizeWhitespace(trimmed, allocator);
+            }
+        }
+    }
+
+    if (synopsis == null) {
+        if (try findElementByClass(allocator, html, "detail-info-right-content")) |synopsis_elem| {
+            const extracted = extractTextContent(synopsis_elem);
+            const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
+            const dotdotdot = "...";
+            const more_link = "<a href=\"javascript:void(0)\"";
+            var end_idx = trimmed.len;
+            if (std.mem.endsWith(u8, trimmed, dotdotdot)) {
+                end_idx = trimmed.len - dotdotdot.len;
+            }
+            if (std.mem.indexOf(u8, trimmed, more_link)) |link_pos| {
+                end_idx = @min(end_idx, link_pos);
+            }
+            if (end_idx > 0) {
+                const final_text = trimmed[0..end_idx];
+                synopsis = try normalizeWhitespace(final_text, allocator);
+            }
+        }
+    }
+
+    const slug_copy = try allocator.dupe(u8, slug);
+    errdefer allocator.free(slug_copy);
+
+    const title_copy = try allocator.dupe(u8, title);
+    errdefer allocator.free(title_copy);
+
+    return MangaMetadata{
+        .slug = slug_copy,
+        .title = title_copy,
+        .synopsis = synopsis,
+    };
+}
+
+fn writeMetadataJson(allocator: std.mem.Allocator, metadata: *MangaMetadata) ![]u8 {
+    var list: std.ArrayListUnmanaged(u8) = .empty;
+    defer list.deinit(allocator);
+
+    try list.appendSlice(allocator, "{\n");
+    try list.appendSlice(allocator, "  \"version\": 1,\n");
+    try list.appendSlice(allocator, "  \"source\": \"mangafox\",\n");
+    try list.writer(allocator).print("  \"slug\": \"{s}\",\n", .{metadata.slug});
+    try list.writer(allocator).print("  \"title\": \"{s}\",\n", .{metadata.title});
+    if (metadata.synopsis) |syn| {
+        try list.writer(allocator).print("  \"synopsis\": \"{s}\"\n", .{syn});
+    } else {
+        try list.appendSlice(allocator, "  \"synopsis\": null\n");
+    }
+    try list.appendSlice(allocator, "}\n");
+
+    return list.toOwnedSlice(allocator);
+}
+
 /// Extract the manga slug from a fanfox.net URL.
 /// e.g. "https://fanfox.net/manga/naruto/" → "naruto"
 pub fn extractSlug(url_str: []const u8) ?[]const u8 {
@@ -693,6 +844,42 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     } else if (opts.verbose) {
         try w.print("RSS: found {d} chapter(s).\n", .{rss_chapters.len});
         try w.flush();
+    }
+
+    // 2b. Always fetch manga page for metadata (even if RSS succeeded)
+    if (opts.verbose) {
+        try w.print("Fetching manga page for metadata: {s}\n", .{url});
+        try w.flush();
+    }
+
+    var metadata_resp = http_mod.fetch(&client, allocator, url, fetch_opts) catch null;
+    defer if (metadata_resp) |*r| r.deinit();
+
+    var manga_metadata: ?MangaMetadata = null;
+    defer if (manga_metadata) |*m| m.deinit(allocator);
+
+    if (metadata_resp) |*resp| {
+        if (resp.isSuccess()) {
+            manga_metadata = parseMangaMetadata(allocator, resp.body, slug) catch null;
+        }
+    }
+
+    if (manga_metadata) |*meta| {
+        const meta_path = try metadataFilePath(allocator, opts.output_dir, slug);
+        defer allocator.free(meta_path);
+
+        const cwd = std.fs.cwd();
+        const meta_dir = std.fs.path.dirname(meta_path) orelse opts.output_dir;
+        cwd.makePath(meta_dir) catch {};
+        const meta_file = cwd.createFile(meta_path, .{ .truncate = true }) catch null;
+        if (meta_file) |f| {
+            defer f.close();
+            const json = writeMetadataJson(allocator, meta) catch null;
+            if (json) |j| {
+                defer allocator.free(j);
+                f.writeAll(j) catch {};
+            }
+        }
     }
 
     const all_chapters = if (rss_chapters.len > 0) rss_chapters else html_chapters;
