@@ -12,6 +12,273 @@ pub const MangafoxChapter = struct {
     url: []const u8, // absolute URL to page 1 of the chapter
 };
 
+/// Manga metadata extracted from the manga landing page.
+pub const MangaMetadata = struct {
+    version: u32 = 1,
+    source: []const u8 = "mangafox",
+    slug: []const u8,
+    title: []const u8,
+    synopsis: ?[]const u8 = null,
+
+    pub fn deinit(self: *MangaMetadata, allocator: std.mem.Allocator) void {
+        allocator.free(self.slug);
+        allocator.free(self.title);
+        if (self.synopsis) |s| allocator.free(s);
+    }
+};
+
+const metadata_filename = ".argiope-metadata.json";
+
+fn metadataFilePath(allocator: std.mem.Allocator, output_dir: []const u8, slug: []const u8) ![]u8 {
+    return std.fmt.allocPrint(allocator, "{s}/{s}/{s}", .{ output_dir, slug, metadata_filename });
+}
+
+fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
+    const class_needle = "class=\"";
+    var search_start: usize = 0;
+
+    while (std.mem.indexOf(u8, html[search_start..], class_needle)) |class_pos| {
+        const pos = search_start + class_pos;
+        const after_class = html[pos + class_needle.len ..];
+
+        // Check if this class contains our target class_name
+        const class_value_end = std.mem.indexOfScalar(u8, after_class, '"') orelse continue;
+        const class_value = after_class[0..class_value_end];
+
+        // Search for class_name with proper boundary checking
+        var is_match = false;
+        var match_pos: usize = 0;
+        while (std.mem.indexOf(u8, class_value[match_pos..], class_name)) |found| {
+            const abs_pos = match_pos + found;
+            const before_ok = abs_pos == 0 or class_value[abs_pos - 1] == ' ';
+            const after_pos = abs_pos + class_name.len;
+            const after_ok = after_pos >= class_value.len or class_value[after_pos] == ' ' or class_value[after_pos] == '"';
+            if (before_ok and after_ok) {
+                is_match = true;
+                break;
+            }
+            match_pos = abs_pos + 1;
+        }
+
+        if (!is_match) {
+            search_start = pos + 1;
+            continue;
+        }
+
+        // Found the right element, now find the tag start
+        const tag_start = std.mem.lastIndexOf(u8, html[0..pos], "<") orelse continue;
+
+        // Find the closing > of the opening tag
+        const tag_content = html[tag_start..];
+        const tag_end = std.mem.indexOfScalar(u8, tag_content, '>') orelse continue;
+        const content_start = tag_start + tag_end + 1;
+
+        // Find the closing tag
+        const search_content = html[content_start..];
+
+        // Simple approach: find the next < and check if it's a closing tag
+        var i: usize = 0;
+        while (i < search_content.len) {
+            if (search_content[i] == '<') {
+                if (i + 1 < search_content.len and search_content[i + 1] == '/') {
+                    // Found closing tag
+                    return search_content[0..i];
+                }
+                // Skip to end of this tag
+                const tag_end_pos = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
+                i = tag_end_pos + 1;
+            } else {
+                i += 1;
+            }
+        }
+
+        return search_content;
+    }
+
+    return null;
+}
+
+fn extractTextContent(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
+    var result: std.ArrayListUnmanaged(u8) = .empty;
+    errdefer result.deinit(allocator);
+
+    var i: usize = 0;
+    while (i < html.len) {
+        if (html[i] == '<') {
+            const close = std.mem.indexOfScalarPos(u8, html, i, '>') orelse break;
+            i = close + 1;
+        } else {
+            try result.append(allocator, html[i]);
+            i += 1;
+        }
+    }
+
+    return result.toOwnedSlice(allocator);
+}
+
+fn normalizeWhitespace(text: []const u8, allocator: std.mem.Allocator) ![]u8 {
+    var result: std.ArrayListUnmanaged(u8) = .empty;
+    defer result.deinit(allocator);
+    var in_whitespace = false;
+    for (text) |c| {
+        if (c == ' ' or c == '\t' or c == '\n' or c == '\r') {
+            if (!in_whitespace and result.items.len > 0) {
+                try result.append(allocator, ' ');
+                in_whitespace = true;
+            }
+        } else {
+            try result.append(allocator, c);
+            in_whitespace = false;
+        }
+    }
+    while (result.items.len > 0 and result.items[result.items.len - 1] == ' ') {
+        result.items.len -= 1;
+    }
+    return result.toOwnedSlice(allocator);
+}
+
+pub fn parseMangaMetadata(
+    allocator: std.mem.Allocator,
+    html: []const u8,
+    slug: []const u8,
+) !MangaMetadata {
+    var title: []const u8 = slug;
+    var title_allocated: ?[]u8 = null;
+    var synopsis: ?[]const u8 = null;
+
+    // Try to extract title from the page
+    if (findElementByClass(html, "detail-info-right-title-font")) |title_elem| {
+        const extracted = try extractTextContent(allocator, title_elem);
+        defer allocator.free(extracted);
+        const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
+        if (trimmed.len > 0) {
+            const allocated = try allocator.dupe(u8, trimmed);
+            title_allocated = allocated;
+            title = allocated;
+        }
+    }
+
+    // Fallback: extract from <title> tag (e.g., "Naruto Manga - Read Naruto Manga Online for Free")
+    if (title_allocated == null) {
+        const title_tag = "<title>";
+        if (std.mem.indexOf(u8, html, title_tag)) |pos| {
+            const content_start = pos + title_tag.len;
+            const content_end = std.mem.indexOfScalar(u8, html[content_start..], '<');
+            if (content_end) |end| {
+                const title_text = html[content_start .. content_start + end];
+                const trimmed = std.mem.trim(u8, title_text, " \t\n\r");
+                // Extract just the manga name (before " Manga -")
+                const dash = " Manga -";
+                if (std.mem.indexOf(u8, trimmed, dash)) |dash_pos| {
+                    const manga_name = trimmed[0..dash_pos];
+                    if (manga_name.len > 0) {
+                        const allocated = try allocator.dupe(u8, manga_name);
+                        title_allocated = allocated;
+                        title = allocated;
+                    }
+                }
+            }
+        }
+    }
+
+    // Try fullcontent first (hidden full synopsis)
+    if (synopsis == null) {
+        if (findElementByClass(html, "fullcontent")) |synopsis_elem| {
+            const extracted = try extractTextContent(allocator, synopsis_elem);
+            defer allocator.free(extracted);
+            const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
+            if (trimmed.len > 0) {
+                synopsis = try normalizeWhitespace(trimmed, allocator);
+            }
+        }
+    }
+
+    // Fallback to the visible truncated content
+    if (synopsis == null) {
+        if (findElementByClass(html, "detail-info-right-content")) |synopsis_elem| {
+            const extracted = try extractTextContent(allocator, synopsis_elem);
+            defer allocator.free(extracted);
+            const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
+            const dotdotdot = "...";
+            const more_link = "<a href=\"javascript:void(0)\"";
+            var end_idx = trimmed.len;
+            if (std.mem.endsWith(u8, trimmed, dotdotdot)) {
+                end_idx = trimmed.len - dotdotdot.len;
+            }
+            if (std.mem.indexOf(u8, trimmed, more_link)) |link_pos| {
+                end_idx = @min(end_idx, link_pos);
+            }
+            if (end_idx > 0) {
+                const final_text = trimmed[0..end_idx];
+                synopsis = try normalizeWhitespace(final_text, allocator);
+            }
+        }
+    }
+
+    const slug_copy = try allocator.dupe(u8, slug);
+    errdefer allocator.free(slug_copy);
+
+    const title_copy = try allocator.dupe(u8, title);
+    errdefer allocator.free(title_copy);
+
+    // Free intermediate allocation if still around
+    if (title_allocated) |a| {
+        allocator.free(a);
+    }
+
+    return MangaMetadata{
+        .slug = slug_copy,
+        .title = title_copy,
+        .synopsis = synopsis,
+    };
+}
+
+fn escapeJsonString(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    var result: std.ArrayListUnmanaged(u8) = .empty;
+    defer result.deinit(allocator);
+
+    for (input) |c| {
+        switch (c) {
+            '"' => try result.appendSlice(allocator, "\\\""),
+            '\\' => try result.appendSlice(allocator, "\\\\"),
+            '\n' => try result.appendSlice(allocator, "\\n"),
+            '\r' => try result.appendSlice(allocator, "\\r"),
+            '\t' => try result.appendSlice(allocator, "\\t"),
+            else => try result.append(allocator, c),
+        }
+    }
+
+    return result.toOwnedSlice(allocator);
+}
+
+fn writeMetadataJson(allocator: std.mem.Allocator, metadata: *MangaMetadata) ![]u8 {
+    var list: std.ArrayListUnmanaged(u8) = .empty;
+    defer list.deinit(allocator);
+
+    try list.appendSlice(allocator, "{\n");
+    try list.appendSlice(allocator, "  \"version\": 1,\n");
+    try list.appendSlice(allocator, "  \"source\": \"mangafox\",\n");
+
+    const escaped_slug = try escapeJsonString(allocator, metadata.slug);
+    defer allocator.free(escaped_slug);
+    try list.writer(allocator).print("  \"slug\": \"{s}\",\n", .{escaped_slug});
+
+    const escaped_title = try escapeJsonString(allocator, metadata.title);
+    defer allocator.free(escaped_title);
+    try list.writer(allocator).print("  \"title\": \"{s}\",\n", .{escaped_title});
+
+    if (metadata.synopsis) |syn| {
+        const escaped_syn = try escapeJsonString(allocator, syn);
+        defer allocator.free(escaped_syn);
+        try list.writer(allocator).print("  \"synopsis\": \"{s}\"\n", .{escaped_syn});
+    } else {
+        try list.appendSlice(allocator, "  \"synopsis\": null\n");
+    }
+    try list.appendSlice(allocator, "}\n");
+
+    return list.toOwnedSlice(allocator);
+}
+
 /// Extract the manga slug from a fanfox.net URL.
 /// e.g. "https://fanfox.net/manga/naruto/" → "naruto"
 pub fn extractSlug(url_str: []const u8) ?[]const u8 {
@@ -693,6 +960,42 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     } else if (opts.verbose) {
         try w.print("RSS: found {d} chapter(s).\n", .{rss_chapters.len});
         try w.flush();
+    }
+
+    // 2b. Always fetch manga page for metadata (even if RSS succeeded)
+    if (opts.verbose) {
+        try w.print("Fetching manga page for metadata: {s}\n", .{url});
+        try w.flush();
+    }
+
+    var metadata_resp = http_mod.fetch(&client, allocator, url, fetch_opts) catch null;
+    defer if (metadata_resp) |*r| r.deinit();
+
+    var manga_metadata: ?MangaMetadata = null;
+    defer if (manga_metadata) |*m| m.deinit(allocator);
+
+    if (metadata_resp) |*resp| {
+        if (resp.isSuccess()) {
+            manga_metadata = parseMangaMetadata(allocator, resp.body, slug) catch null;
+        }
+    }
+
+    if (manga_metadata) |*meta| {
+        const meta_path = try metadataFilePath(allocator, opts.output_dir, slug);
+        defer allocator.free(meta_path);
+
+        const cwd = std.fs.cwd();
+        const meta_dir = std.fs.path.dirname(meta_path) orelse opts.output_dir;
+        cwd.makePath(meta_dir) catch {};
+        const meta_file = cwd.createFile(meta_path, .{ .truncate = true }) catch null;
+        if (meta_file) |f| {
+            defer f.close();
+            const json = writeMetadataJson(allocator, meta) catch null;
+            if (json) |j| {
+                defer allocator.free(j);
+                f.writeAll(j) catch {};
+            }
+        }
     }
 
     const all_chapters = if (rss_chapters.len > 0) rss_chapters else html_chapters;
