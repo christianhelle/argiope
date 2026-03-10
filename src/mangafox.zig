@@ -33,21 +33,58 @@ fn metadataFilePath(allocator: std.mem.Allocator, output_dir: []const u8, slug: 
     return std.fmt.allocPrint(allocator, "{s}/{s}/{s}", .{ output_dir, slug, metadata_filename });
 }
 
-fn findElementByClass(allocator: std.mem.Allocator, html: []const u8, class_name: []const u8) !?[]const u8 {
-    const class_needle = try std.fmt.allocPrint(allocator, "class=\"{s}\"", .{class_name});
-    defer allocator.free(class_needle);
-    if (std.mem.indexOf(u8, html, class_needle)) |pos| {
-        const tag_start = std.mem.lastIndexOf(u8, html[0..pos], "<") orelse {
-            if (pos == 0) return null;
-            return null;
-        };
-        if (tag_start == 0 or html[tag_start - 1] != '<') return null;
-        const tag_end = std.mem.indexOfScalarPos(u8, html, pos + class_needle.len, '>') orelse return null;
-        const content_start = tag_end + 1;
-        const close_tag = "</";
-        const content_end = std.mem.indexOf(u8, html[content_start..], close_tag) orelse return null;
-        return html[content_start .. content_start + content_end];
+fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
+    const class_needle = "class=\"";
+    var search_start: usize = 0;
+
+    while (std.mem.indexOf(u8, html[search_start..], class_needle)) |class_pos| {
+        const pos = search_start + class_pos;
+        const after_class = html[pos + class_needle.len ..];
+
+        // Check if this class contains our target class_name
+        const class_value_end = std.mem.indexOfScalar(u8, after_class, '"') orelse continue;
+        const class_value = after_class[0..class_value_end];
+
+        // Check if class_name is in the class value (exact match or as one of multiple classes)
+        const is_match = std.mem.indexOf(u8, class_value, class_name) != null and (class_value.len == class_name.len or
+            (class_value.len > class_name.len and (class_value[class_name.len] == ' ' or class_value[class_name.len] == '"')) or
+            (class_name.len > 0 and class_value.len >= class_name.len and class_value[class_value.len - class_name.len - 1] == ' '));
+
+        if (!is_match) {
+            search_start = pos + 1;
+            continue;
+        }
+
+        // Found the right element, now find the tag start
+        const tag_start = std.mem.lastIndexOf(u8, html[0..pos], "<") orelse continue;
+
+        // Find the closing > of the opening tag
+        const tag_content = html[tag_start..];
+        const tag_end = std.mem.indexOfScalar(u8, tag_content, '>') orelse continue;
+        const content_start = tag_start + tag_end + 1;
+
+        // Find the closing tag
+        const search_content = html[content_start..];
+
+        // Simple approach: find the next < and check if it's a closing tag
+        var i: usize = 0;
+        while (i < search_content.len) {
+            if (search_content[i] == '<') {
+                if (i + 1 < search_content.len and search_content[i + 1] == '/') {
+                    // Found closing tag
+                    return search_content[0..i];
+                }
+                // Skip to end of this tag
+                const tag_end_pos = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
+                i = tag_end_pos + 1;
+            } else {
+                i += 1;
+            }
+        }
+
+        return search_content;
     }
+
     return null;
 }
 
@@ -91,18 +128,46 @@ pub fn parseMangaMetadata(
     slug: []const u8,
 ) !MangaMetadata {
     var title: []const u8 = slug;
+    var title_allocated: ?[]u8 = null;
     var synopsis: ?[]const u8 = null;
 
-    if (try findElementByClass(allocator, html, "detail-info-right-title-font")) |title_elem| {
+    // Try to extract title from the page
+    if (findElementByClass(html, "detail-info-right-title-font")) |title_elem| {
         const extracted = extractTextContent(title_elem);
         const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
         if (trimmed.len > 0) {
-            title = try allocator.dupe(u8, trimmed);
+            const allocated = try allocator.dupe(u8, trimmed);
+            title_allocated = allocated;
+            title = allocated;
         }
     }
 
+    // Fallback: extract from <title> tag (e.g., "Naruto Manga - Read Naruto Manga Online for Free")
+    if (title_allocated == null) {
+        const title_tag = "<title>";
+        if (std.mem.indexOf(u8, html, title_tag)) |pos| {
+            const content_start = pos + title_tag.len;
+            const content_end = std.mem.indexOfScalar(u8, html[content_start..], '<');
+            if (content_end) |end| {
+                const title_text = html[content_start .. content_start + end];
+                const trimmed = std.mem.trim(u8, title_text, " \t\n\r");
+                // Extract just the manga name (before " Manga -")
+                const dash = " Manga -";
+                if (std.mem.indexOf(u8, trimmed, dash)) |dash_pos| {
+                    const manga_name = trimmed[0..dash_pos];
+                    if (manga_name.len > 0) {
+                        const allocated = try allocator.dupe(u8, manga_name);
+                        title_allocated = allocated;
+                        title = allocated;
+                    }
+                }
+            }
+        }
+    }
+
+    // Try fullcontent first (hidden full synopsis)
     if (synopsis == null) {
-        if (try findElementByClass(allocator, html, "fullcontent")) |synopsis_elem| {
+        if (findElementByClass(html, "fullcontent")) |synopsis_elem| {
             const extracted = extractTextContent(synopsis_elem);
             const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
             if (trimmed.len > 0) {
@@ -111,8 +176,9 @@ pub fn parseMangaMetadata(
         }
     }
 
+    // Fallback to the visible truncated content
     if (synopsis == null) {
-        if (try findElementByClass(allocator, html, "detail-info-right-content")) |synopsis_elem| {
+        if (findElementByClass(html, "detail-info-right-content")) |synopsis_elem| {
             const extracted = extractTextContent(synopsis_elem);
             const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
             const dotdotdot = "...";
@@ -136,6 +202,11 @@ pub fn parseMangaMetadata(
 
     const title_copy = try allocator.dupe(u8, title);
     errdefer allocator.free(title_copy);
+
+    // Free intermediate allocation if still around
+    if (title_allocated) |a| {
+        allocator.free(a);
+    }
 
     return MangaMetadata{
         .slug = slug_copy,
