@@ -132,9 +132,7 @@ const DirNode = struct {
         self.images.deinit(allocator);
         self.subdirs.deinit(allocator);
         if (self.metadata) |m| {
-            allocator.free(m.slug);
-            allocator.free(m.title);
-            if (m.synopsis) |s| allocator.free(s);
+            m.deinit(allocator);
             allocator.destroy(m);
         }
     }
@@ -912,7 +910,7 @@ fn writeReaderPage(
     } else {
         try w.writeAll("<h1>Reader</h1>\n");
     }
-    try w.print("<p>{s}</p>\n", .{escaped_subtitle});
+    try w.print("<p>{s}</p>\n</div>\n", .{escaped_subtitle});
     if (metadata) |m| {
         if (m.synopsis) |syn| {
             const escaped_syn = try escapeHtml(allocator, syn);

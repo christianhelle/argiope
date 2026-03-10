@@ -45,10 +45,20 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
         const class_value_end = std.mem.indexOfScalar(u8, after_class, '"') orelse continue;
         const class_value = after_class[0..class_value_end];
 
-        // Check if class_name is in the class value (exact match or as one of multiple classes)
-        const is_match = std.mem.indexOf(u8, class_value, class_name) != null and (class_value.len == class_name.len or
-            (class_value.len > class_name.len and (class_value[class_name.len] == ' ' or class_value[class_name.len] == '"')) or
-            (class_name.len > 0 and class_value.len >= class_name.len and class_value[class_value.len - class_name.len - 1] == ' '));
+        // Search for class_name with proper boundary checking
+        var is_match = false;
+        var match_pos: usize = 0;
+        while (std.mem.indexOf(u8, class_value[match_pos..], class_name)) |found| {
+            const abs_pos = match_pos + found;
+            const before_ok = abs_pos == 0 or class_value[abs_pos - 1] == ' ';
+            const after_pos = abs_pos + class_name.len;
+            const after_ok = after_pos >= class_value.len or class_value[after_pos] == ' ' or class_value[after_pos] == '"';
+            if (before_ok and after_ok) {
+                is_match = true;
+                break;
+            }
+            match_pos = abs_pos + 1;
+        }
 
         if (!is_match) {
             search_start = pos + 1;
@@ -88,17 +98,22 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
     return null;
 }
 
-fn extractTextContent(html: []const u8) []const u8 {
+fn extractTextContent(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
+    var result: std.ArrayListUnmanaged(u8) = .empty;
+    errdefer result.deinit(allocator);
+
     var i: usize = 0;
     while (i < html.len) {
         if (html[i] == '<') {
             const close = std.mem.indexOfScalarPos(u8, html, i, '>') orelse break;
             i = close + 1;
         } else {
+            try result.append(allocator, html[i]);
             i += 1;
         }
     }
-    return html[0..i];
+
+    return result.toOwnedSlice(allocator);
 }
 
 fn normalizeWhitespace(text: []const u8, allocator: std.mem.Allocator) ![]u8 {
@@ -133,7 +148,8 @@ pub fn parseMangaMetadata(
 
     // Try to extract title from the page
     if (findElementByClass(html, "detail-info-right-title-font")) |title_elem| {
-        const extracted = extractTextContent(title_elem);
+        const extracted = try extractTextContent(allocator, title_elem);
+        defer allocator.free(extracted);
         const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
         if (trimmed.len > 0) {
             const allocated = try allocator.dupe(u8, trimmed);
@@ -168,7 +184,8 @@ pub fn parseMangaMetadata(
     // Try fullcontent first (hidden full synopsis)
     if (synopsis == null) {
         if (findElementByClass(html, "fullcontent")) |synopsis_elem| {
-            const extracted = extractTextContent(synopsis_elem);
+            const extracted = try extractTextContent(allocator, synopsis_elem);
+            defer allocator.free(extracted);
             const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
             if (trimmed.len > 0) {
                 synopsis = try normalizeWhitespace(trimmed, allocator);
@@ -179,7 +196,8 @@ pub fn parseMangaMetadata(
     // Fallback to the visible truncated content
     if (synopsis == null) {
         if (findElementByClass(html, "detail-info-right-content")) |synopsis_elem| {
-            const extracted = extractTextContent(synopsis_elem);
+            const extracted = try extractTextContent(allocator, synopsis_elem);
+            defer allocator.free(extracted);
             const trimmed = std.mem.trim(u8, extracted, " \t\n\r");
             const dotdotdot = "...";
             const more_link = "<a href=\"javascript:void(0)\"";
@@ -215,6 +233,24 @@ pub fn parseMangaMetadata(
     };
 }
 
+fn escapeJsonString(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    var result: std.ArrayListUnmanaged(u8) = .empty;
+    defer result.deinit(allocator);
+
+    for (input) |c| {
+        switch (c) {
+            '"' => try result.appendSlice(allocator, "\\\""),
+            '\\' => try result.appendSlice(allocator, "\\\\"),
+            '\n' => try result.appendSlice(allocator, "\\n"),
+            '\r' => try result.appendSlice(allocator, "\\r"),
+            '\t' => try result.appendSlice(allocator, "\\t"),
+            else => try result.append(allocator, c),
+        }
+    }
+
+    return result.toOwnedSlice(allocator);
+}
+
 fn writeMetadataJson(allocator: std.mem.Allocator, metadata: *MangaMetadata) ![]u8 {
     var list: std.ArrayListUnmanaged(u8) = .empty;
     defer list.deinit(allocator);
@@ -222,10 +258,19 @@ fn writeMetadataJson(allocator: std.mem.Allocator, metadata: *MangaMetadata) ![]
     try list.appendSlice(allocator, "{\n");
     try list.appendSlice(allocator, "  \"version\": 1,\n");
     try list.appendSlice(allocator, "  \"source\": \"mangafox\",\n");
-    try list.writer(allocator).print("  \"slug\": \"{s}\",\n", .{metadata.slug});
-    try list.writer(allocator).print("  \"title\": \"{s}\",\n", .{metadata.title});
+
+    const escaped_slug = try escapeJsonString(allocator, metadata.slug);
+    defer allocator.free(escaped_slug);
+    try list.writer(allocator).print("  \"slug\": \"{s}\",\n", .{escaped_slug});
+
+    const escaped_title = try escapeJsonString(allocator, metadata.title);
+    defer allocator.free(escaped_title);
+    try list.writer(allocator).print("  \"title\": \"{s}\",\n", .{escaped_title});
+
     if (metadata.synopsis) |syn| {
-        try list.writer(allocator).print("  \"synopsis\": \"{s}\"\n", .{syn});
+        const escaped_syn = try escapeJsonString(allocator, syn);
+        defer allocator.free(escaped_syn);
+        try list.writer(allocator).print("  \"synopsis\": \"{s}\"\n", .{escaped_syn});
     } else {
         try list.appendSlice(allocator, "  \"synopsis\": null\n");
     }
