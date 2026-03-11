@@ -847,6 +847,36 @@ fn writePageStart(w: anytype, title: []const u8) !void {
         \\      });
         \\      setTheme(initial);
         \\    });
+        \\    window.addEventListener('keydown', (e) => {
+        \\      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        \\      if (window.disableVimScrolling && (e.key === 'h' || e.key === 'H' || e.key === 'l' || e.key === 'L')) return;
+        \\      const amount = 100;
+        \\      const half = window.innerHeight / 2;
+        \\      const key = e.key;
+        \\      switch (key) {
+        \\        case 'j':
+        \\        case 'J': window.scrollBy({ top: amount, behavior: 'smooth' }); break;
+        \\        case 'k':
+        \\        case 'K': window.scrollBy({ top: -amount, behavior: 'smooth' }); break;
+        \\        case 'h':
+        \\        case 'H': window.scrollBy({ left: -amount, behavior: 'smooth' }); break;
+        \\        case 'l':
+        \\        case 'L': window.scrollBy({ left: amount, behavior: 'smooth' }); break;
+        \\        case 'd':
+        \\        case 'D': window.scrollBy({ top: half, behavior: 'smooth' }); break;
+        \\        case 'u':
+        \\        case 'U': window.scrollBy({ top: -half, behavior: 'smooth' }); break;
+        \\        case 'g':
+        \\          if (window.lastG && Date.now() - window.lastG < 500) {
+        \\            window.scrollTo({ top: 0, behavior: 'smooth' });
+        \\            window.lastG = 0;
+        \\          } else {
+        \\            window.lastG = Date.now();
+        \\          }
+        \\          break;
+        \\        case 'G': window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }); break;
+        \\      }
+        \\    });
         \\  })();
         \\</script>
         \\</head>
@@ -1210,6 +1240,7 @@ fn writeReaderPage(
     }
 
     try w.writeAll(
+        \\    window.disableVimScrolling = true;
         \\    const image = document.getElementById('viewer-image');
         \\    const status = document.getElementById('viewer-status');
         \\    const prev = document.getElementById('prev-image');
@@ -1258,8 +1289,15 @@ fn writeReaderPage(
         \\    });
         \\    window.addEventListener('hashchange', () => render(parseIndex()));
         \\    window.addEventListener('keydown', (event) => {
-        \\      if (event.key === 'ArrowLeft' && !prev.disabled) prev.click();
-        \\      if (event.key === 'ArrowRight' && !next.disabled) next.click();
+        \\      const key = event.key;
+        \\      if ((key === 'ArrowLeft' || key === 'h' || key === 'H') && !prev.disabled) {
+        \\          event.preventDefault();
+        \\          prev.click();
+        \\      }
+        \\      if ((key === 'ArrowRight' || key === 'l' || key === 'L') && !next.disabled) {
+        \\          event.preventDefault();
+        \\          next.click();
+        \\      }
         \\    });
         \\    if (!window.location.hash && items.length) {
         \\      window.location.hash = '#1';

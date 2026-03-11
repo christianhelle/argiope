@@ -314,8 +314,6 @@ fn writeHtml(
         \\  <div class="stat"><div class="stat-label">Max</div><div class="stat-value">{d}ms</div></div>
         \\</div>
         \\</div>
-        \\</body>
-        \\</html>
     , .{
         summary.total_urls,
         summary.ok_count,
@@ -328,6 +326,42 @@ fn writeHtml(
         min,
         summary.max_time_ms,
     });
+
+    try w.writeAll(
+        \\<script>
+        \\  window.addEventListener('keydown', (e) => {
+        \\    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        \\    const amount = 100;
+        \\    const half = window.innerHeight / 2;
+        \\    const key = e.key;
+        \\    switch (key) {
+        \\      case 'j':
+        \\      case 'J': window.scrollBy({ top: amount, behavior: 'smooth' }); break;
+        \\      case 'k':
+        \\      case 'K': window.scrollBy({ top: -amount, behavior: 'smooth' }); break;
+        \\      case 'h':
+        \\      case 'H': window.scrollBy({ left: -amount, behavior: 'smooth' }); break;
+        \\      case 'l':
+        \\      case 'L': window.scrollBy({ left: amount, behavior: 'smooth' }); break;
+        \\      case 'd':
+        \\      case 'D': window.scrollBy({ top: half, behavior: 'smooth' }); break;
+        \\      case 'u':
+        \\      case 'U': window.scrollBy({ top: -half, behavior: 'smooth' }); break;
+        \\      case 'g':
+        \\        if (window.lastG && Date.now() - window.lastG < 500) {
+        \\          window.scrollTo({ top: 0, behavior: 'smooth' });
+        \\          window.lastG = 0;
+        \\        } else {
+        \\          window.lastG = Date.now();
+        \\        }
+        \\        break;
+        \\      case 'G': window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }); break;
+        \\    }
+        \\  });
+        \\</script>
+        \\</body>
+        \\</html>
+    );
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
