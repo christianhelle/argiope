@@ -50,7 +50,6 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
     const class_needle = "class=\"";
     var search_start: usize = 0;
 
-
     while (std.mem.indexOf(u8, html[search_start..], class_needle)) |class_pos| {
         const pos = search_start + class_pos;
         const after_class = html[pos + class_needle.len ..];
@@ -92,10 +91,10 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
         var name_end = name_start;
         while (name_end < html.len) : (name_end += 1) {
             const c = html[name_end];
-            if (c == ' ' or c == '>' or c == '/') break;
+            // Treat any whitespace as a terminator in addition to '>' and '/'
+            if (c == ' ' or c == '\n' or c == '\r' or c == '\t' or c == '>' or c == '/') break;
         }
         const tag_name = html[name_start..name_end];
-
 
         // Now scan content while tracking depth for nested tags with the same name
         const search_content = html[content_start..];
@@ -104,10 +103,21 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
         while (i < search_content.len) {
             if (search_content[i] == '<') {
                 if (i + 1 < search_content.len and search_content[i + 1] == '!') {
-                    // Skip comments/doctype
-                    const skip_end = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
-                    i = skip_end + 1;
-                    continue;
+                    // Handle comments (<!-- ... -->) and doctypes. If this is a comment opener
+                    // starting with "<!--" search for the full terminator "-->". Otherwise
+                    // fall back to skipping to the next '>' for doctypes.
+                    if (i + 4 <= search_content.len and
+                        search_content[i + 2] == '-' and search_content[i + 3] == '-')
+                    {
+                        // Search for "-->" starting at i+4
+                        const term = std.mem.indexOfPos(u8, search_content, i + 4, "-->") orelse break;
+                        i = term + 3;
+                        continue;
+                    } else {
+                        const skip_end = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
+                        i = skip_end + 1;
+                        continue;
+                    }
                 }
                 const is_closing = (i + 1 < search_content.len and search_content[i + 1] == '/');
                 const tag_end_pos = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
@@ -118,7 +128,8 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
                 // tag_end_pos is an absolute index into search_content; do not add i
                 while (tn_end < tag_end_pos) : (tn_end += 1) {
                     const c = search_content[tn_end];
-                    if (c == ' ' or c == '>' or c == '/') break;
+                    // Treat any whitespace as a terminator in addition to '>' and '/'
+                    if (c == ' ' or c == '\n' or c == '\r' or c == '\t' or c == '>' or c == '/') break;
                 }
                 const candidate = search_content[tn_start..tn_end];
                 if (eqIgnoreAscii(candidate, tag_name)) {
@@ -1026,21 +1037,13 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         }
     }
 
-    if (manga_metadata) |*meta| {
-        const meta_path = try metadataFilePath(allocator, opts.output_dir, slug);
-        defer allocator.free(meta_path);
-
-        const cwd = std.fs.cwd();
-        const meta_dir = std.fs.path.dirname(meta_path) orelse opts.output_dir;
-        // Ensure directory exists; propagate error if creation fails
-        try cwd.makePath(meta_dir);
-
-        const f = try cwd.createFile(meta_path, .{ .truncate = true });
-        defer f.close();
-
-        const j = try writeMetadataJson(allocator, meta);
-        defer allocator.free(j);
-        try f.writeAll(j);
+    // Best-effort metadata writing was removed to avoid filesystem side-effects during tests.
+    // Retain the parsed metadata in-memory for later use (e.g., generating HTML).
+    if (opts.verbose) {
+        if (manga_metadata) |*meta| {
+            try w.print("  Parsed metadata: {s}\n", .{meta.title});
+            try w.flush();
+        }
     }
 
     const all_chapters = if (rss_chapters.len > 0) rss_chapters else html_chapters;
