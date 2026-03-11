@@ -186,6 +186,7 @@ pub fn printHelp() !void {
         \\  --report <file>       Write a report to <file>
         \\  --report-format <fmt> Report format: text (default), markdown, html
         \\  --include-positives   Include successful links in the report
+        \\  --write-metadata      Write metadata alongside output (default: false)
         \\  -h, --help            Show this help
         \\  -v, --version         Show version
         \\
