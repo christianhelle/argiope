@@ -235,6 +235,11 @@ make test
 make clean
 ```
 
+## Unreleased changes
+
+- Fix: Correct UTF-8 surrogate pair encoding in src/image_browser.zig to always emit 4-byte sequences for decoded surrogate pairs and fail on invalid codepoints.
+- Fix: Correct loop bound when scanning tag names in src/mangafox.zig so tag_end_pos is treated as an absolute index into the search buffer.
+
 ## License
 
 MIT

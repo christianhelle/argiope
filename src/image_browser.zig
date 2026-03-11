@@ -217,17 +217,17 @@ fn extractJsonString(allocator: std.mem.Allocator, data: []const u8, key: []cons
                             return null;
                         }
                         const codepoint: u32 = 0x10000 + (((v - 0xD800) << 10) | (v2 - 0xDC00));
-                        // Encode as UTF-8
-                        if (codepoint <= 0xFFFF) {
-                            // shouldn't happen for surrogate pair, but handle
-                            out[out_idx] = @intCast(codepoint);
-                            out_idx += 1;
-                        } else if (codepoint <= 0x1FFFFF) {
+                        // Encode as UTF-8 (surrogate pairs must produce 4-byte sequences)
+                        if (codepoint >= 0x10000 and codepoint <= 0x1FFFFF) {
                             out[out_idx] = @intCast(0xF0 | ((codepoint >> 18) & 0x07));
                             out[out_idx + 1] = @intCast(0x80 | ((codepoint >> 12) & 0x3F));
                             out[out_idx + 2] = @intCast(0x80 | ((codepoint >> 6) & 0x3F));
                             out[out_idx + 3] = @intCast(0x80 | (codepoint & 0x3F));
                             out_idx += 4;
+                        } else {
+                            // Invalid codepoint for surrogate pair decoding
+                            allocator.free(out);
+                            return null;
                         }
                         k += 12; // consumed two \uXXXX sequences
                     } else {

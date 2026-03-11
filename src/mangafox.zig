@@ -115,7 +115,8 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
                 var tn_start = i + 1;
                 if (is_closing) tn_start += 1;
                 var tn_end = tn_start;
-                while (tn_end < tag_end_pos + i + 1) : (tn_end += 1) {
+                // tag_end_pos is an absolute index into search_content; do not add i
+                while (tn_end < tag_end_pos) : (tn_end += 1) {
                     const c = search_content[tn_end];
                     if (c == ' ' or c == '>' or c == '/') break;
                 }
