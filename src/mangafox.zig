@@ -1037,10 +1037,48 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         }
     }
 
-    // Best-effort metadata writing was removed to avoid filesystem side-effects during tests.
-    // Retain the parsed metadata in-memory for later use (e.g., generating HTML).
-    if (opts.verbose) {
-        if (manga_metadata) |*meta| {
+    // Best-effort metadata writing. Retain the parsed metadata in-memory for later use
+    // (e.g., generating HTML) and optionally write it to disk.
+    if (manga_metadata) |*meta| {
+        if (opts.write_metadata) {
+            // Compute metadata file path and write best-effort. Errors shouldn't abort the
+            // main run; they are reported and ignored.
+            const meta_path = metadataFilePath(allocator, opts.output_dir, slug) catch |err| blk: {
+                try w.print("Warning: failed to compute metadata path: {s}\n", .{@errorName(err)});
+                break :blk null;
+            };
+            if (meta_path) |path| {
+                defer allocator.free(path);
+
+                const cwd = std.fs.cwd();
+                const meta_dir = std.fs.path.dirname(path) orelse opts.output_dir;
+                cwd.makePath(meta_dir) catch |err| {
+                    if (err != error.PathAlreadyExists) {
+                        try w.print("Warning: could not create metadata directory {s}: {s}\n", .{ meta_dir, @errorName(err) });
+                    }
+                };
+
+                const f_opt = cwd.createFile(path, .{ .truncate = true }) catch |err| blk: {
+                    try w.print("Warning: could not create metadata file {s}: {s}\n", .{ path, @errorName(err) });
+                    break :blk null;
+                };
+                if (f_opt) |file| {
+                    defer file.close();
+
+                    const j = writeMetadataJson(allocator, meta) catch |err| blk: {
+                        try w.print("Warning: failed to serialize metadata for {s}: {s}\n", .{ slug, @errorName(err) });
+                        break :blk null;
+                    };
+                    if (j) |jb| {
+                        defer allocator.free(jb);
+                        file.writeAll(jb) catch |err| {
+                            try w.print("Warning: failed to write metadata file {s}: {s}\n", .{ path, @errorName(err) });
+                        };
+                    }
+                }
+            }
+        }
+        if (opts.verbose) {
             try w.print("  Parsed metadata: {s}\n", .{meta.title});
             try w.flush();
         }
