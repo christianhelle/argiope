@@ -1050,30 +1050,52 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
             if (meta_path) |path| {
                 defer allocator.free(path);
 
-                const cwd = std.fs.cwd();
-                const meta_dir = std.fs.path.dirname(path) orelse opts.output_dir;
-                cwd.makePath(meta_dir) catch |err| {
-                    if (err != error.PathAlreadyExists) {
-                        try w.print("Warning: could not create metadata directory {s}: {s}\n", .{ meta_dir, @errorName(err) });
-                    }
-                };
-
-                const f_opt = cwd.createFile(path, .{ .truncate = true }) catch |err| blk: {
-                    try w.print("Warning: could not create metadata file {s}: {s}\n", .{ path, @errorName(err) });
+                const jb = writeMetadataJson(allocator, meta) catch |err| blk: {
+                    try w.print("Warning: failed to serialize metadata for {s}: {s}\n", .{ slug, @errorName(err) });
                     break :blk null;
                 };
-                if (f_opt) |file| {
-                    defer file.close();
 
-                    const j = writeMetadataJson(allocator, meta) catch |err| blk: {
-                        try w.print("Warning: failed to serialize metadata for {s}: {s}\n", .{ slug, @errorName(err) });
+                if (jb) |json_buf| {
+                    defer allocator.free(json_buf);
+
+                    const cwd = std.fs.cwd();
+                    const meta_dir = std.fs.path.dirname(path) orelse opts.output_dir;
+                    cwd.makePath(meta_dir) catch |err| {
+                        if (err != error.PathAlreadyExists) {
+                            try w.print("Warning: could not create metadata directory {s}: {s}\n", .{ meta_dir, @errorName(err) });
+                        }
+                    };
+
+                    const temp_path = std.fmt.allocPrint(allocator, "{s}.tmp", .{path}) catch |err| blk: {
+                        try w.print("Warning: failed to compute temporary metadata path: {s}\n", .{@errorName(err)});
                         break :blk null;
                     };
-                    if (j) |jb| {
-                        defer allocator.free(jb);
-                        file.writeAll(jb) catch |err| {
-                            try w.print("Warning: failed to write metadata file {s}: {s}\n", .{ path, @errorName(err) });
+
+                    if (temp_path) |t_path| {
+                        defer allocator.free(t_path);
+
+                        const f_opt = cwd.createFile(t_path, .{ .truncate = true }) catch |err| blk: {
+                            try w.print("Warning: could not create temporary metadata file {s}: {s}\n", .{ t_path, @errorName(err) });
+                            break :blk null;
                         };
+
+                        if (f_opt) |file| {
+                            var write_success = true;
+                            file.writeAll(json_buf) catch |err| {
+                                try w.print("Warning: failed to write temporary metadata file {s}: {s}\n", .{ t_path, @errorName(err) });
+                                write_success = false;
+                            };
+                            file.close();
+
+                            if (write_success) {
+                                cwd.rename(t_path, path) catch |err| {
+                                    try w.print("Warning: failed to move temporary metadata file to {s}: {s}\n", .{ path, @errorName(err) });
+                                };
+                            } else {
+                                // Best-effort cleanup of partial temp file
+                                cwd.deleteFile(t_path) catch {};
+                            }
+                        }
                     }
                 }
             }
