@@ -165,6 +165,58 @@ function setupToc() {
     window.addEventListener('scroll', update, { passive: true });
 }
 
+function setupVimMotions() {
+    window.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        const scrollAmount = 100;
+        const halfPage = window.innerHeight / 2;
+        const key = e.key;
+
+        switch (key) {
+            case 'j':
+            case 'J':
+                window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+                break;
+            case 'k':
+            case 'K':
+                window.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
+                break;
+            case 'h':
+            case 'H':
+                window.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+                break;
+            case 'l':
+            case 'L':
+                window.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+                break;
+            case 'd':
+            case 'D':
+                if (e.ctrlKey) return;
+                window.scrollBy({ top: halfPage, behavior: 'smooth' });
+                break;
+            case 'u':
+            case 'U':
+                if (e.ctrlKey) return;
+                window.scrollBy({ top: -halfPage, behavior: 'smooth' });
+                break;
+            case 'g':
+                if (window.lastG && Date.now() - window.lastG < 500) {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    window.lastG = 0;
+                } else {
+                    window.lastG = Date.now();
+                }
+                break;
+            case 'G':
+                window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+                break;
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initializeTheme();
     setupThemeToggle();
@@ -173,4 +225,5 @@ document.addEventListener('DOMContentLoaded', () => {
     setupCurrentPageHighlight();
     setupSectionHighlight();
     setupToc();
+    setupVimMotions();
 });
