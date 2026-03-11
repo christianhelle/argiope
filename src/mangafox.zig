@@ -50,7 +50,6 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
     const class_needle = "class=\"";
     var search_start: usize = 0;
 
-
     while (std.mem.indexOf(u8, html[search_start..], class_needle)) |class_pos| {
         const pos = search_start + class_pos;
         const after_class = html[pos + class_needle.len ..];
@@ -92,10 +91,10 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
         var name_end = name_start;
         while (name_end < html.len) : (name_end += 1) {
             const c = html[name_end];
-            if (c == ' ' or c == '>' or c == '/') break;
+            // Treat any whitespace as a terminator in addition to '>' and '/'
+            if (c == ' ' or c == '\n' or c == '\r' or c == '\t' or c == '>' or c == '/') break;
         }
         const tag_name = html[name_start..name_end];
-
 
         // Now scan content while tracking depth for nested tags with the same name
         const search_content = html[content_start..];
@@ -104,10 +103,21 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
         while (i < search_content.len) {
             if (search_content[i] == '<') {
                 if (i + 1 < search_content.len and search_content[i + 1] == '!') {
-                    // Skip comments/doctype
-                    const skip_end = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
-                    i = skip_end + 1;
-                    continue;
+                    // Handle comments (<!-- ... -->) and doctypes. If this is a comment opener
+                    // starting with "<!--" search for the full terminator "-->". Otherwise
+                    // fall back to skipping to the next '>' for doctypes.
+                    if (i + 4 <= search_content.len and
+                        search_content[i + 2] == '-' and search_content[i + 3] == '-')
+                    {
+                        // Search for "-->" starting at i+4
+                        const term = std.mem.indexOfPos(u8, search_content, i + 4, "-->") orelse break;
+                        i = term + 3;
+                        continue;
+                    } else {
+                        const skip_end = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
+                        i = skip_end + 1;
+                        continue;
+                    }
                 }
                 const is_closing = (i + 1 < search_content.len and search_content[i + 1] == '/');
                 const tag_end_pos = std.mem.indexOfScalarPos(u8, search_content, i, '>') orelse break;
@@ -118,7 +128,8 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
                 // tag_end_pos is an absolute index into search_content; do not add i
                 while (tn_end < tag_end_pos) : (tn_end += 1) {
                     const c = search_content[tn_end];
-                    if (c == ' ' or c == '>' or c == '/') break;
+                    // Treat any whitespace as a terminator in addition to '>' and '/'
+                    if (c == ' ' or c == '\n' or c == '\r' or c == '\t' or c == '>' or c == '/') break;
                 }
                 const candidate = search_content[tn_start..tn_end];
                 if (eqIgnoreAscii(candidate, tag_name)) {
@@ -1026,21 +1037,73 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         }
     }
 
+    // Best-effort metadata writing. Retain the parsed metadata in-memory for later use
+    // (e.g., generating HTML) and optionally write it to disk.
     if (manga_metadata) |*meta| {
-        const meta_path = try metadataFilePath(allocator, opts.output_dir, slug);
-        defer allocator.free(meta_path);
+        if (opts.write_metadata) {
+            // Compute metadata file path and write best-effort. Errors shouldn't abort the
+            // main run; they are reported and ignored.
+            const meta_path = metadataFilePath(allocator, opts.output_dir, slug) catch |err| blk: {
+                try w.print("Warning: failed to compute metadata path: {s}\n", .{@errorName(err)});
+                break :blk null;
+            };
+            if (meta_path) |path| {
+                defer allocator.free(path);
 
-        const cwd = std.fs.cwd();
-        const meta_dir = std.fs.path.dirname(meta_path) orelse opts.output_dir;
-        // Ensure directory exists; propagate error if creation fails
-        try cwd.makePath(meta_dir);
+                const jb = writeMetadataJson(allocator, meta) catch |err| blk: {
+                    try w.print("Warning: failed to serialize metadata for {s}: {s}\n", .{ slug, @errorName(err) });
+                    break :blk null;
+                };
 
-        const f = try cwd.createFile(meta_path, .{ .truncate = true });
-        defer f.close();
+                if (jb) |json_buf| {
+                    defer allocator.free(json_buf);
 
-        const j = try writeMetadataJson(allocator, meta);
-        defer allocator.free(j);
-        try f.writeAll(j);
+                    const cwd = std.fs.cwd();
+                    const meta_dir = std.fs.path.dirname(path) orelse opts.output_dir;
+                    cwd.makePath(meta_dir) catch |err| {
+                        if (err != error.PathAlreadyExists) {
+                            try w.print("Warning: could not create metadata directory {s}: {s}\n", .{ meta_dir, @errorName(err) });
+                        }
+                    };
+
+                    const temp_path = std.fmt.allocPrint(allocator, "{s}.tmp", .{path}) catch |err| blk: {
+                        try w.print("Warning: failed to compute temporary metadata path: {s}\n", .{@errorName(err)});
+                        break :blk null;
+                    };
+
+                    if (temp_path) |t_path| {
+                        defer allocator.free(t_path);
+
+                        const f_opt = cwd.createFile(t_path, .{ .truncate = true }) catch |err| blk: {
+                            try w.print("Warning: could not create temporary metadata file {s}: {s}\n", .{ t_path, @errorName(err) });
+                            break :blk null;
+                        };
+
+                        if (f_opt) |file| {
+                            var write_success = true;
+                            file.writeAll(json_buf) catch |err| {
+                                try w.print("Warning: failed to write temporary metadata file {s}: {s}\n", .{ t_path, @errorName(err) });
+                                write_success = false;
+                            };
+                            file.close();
+
+                            if (write_success) {
+                                cwd.rename(t_path, path) catch |err| {
+                                    try w.print("Warning: failed to move temporary metadata file to {s}: {s}\n", .{ path, @errorName(err) });
+                                };
+                            } else {
+                                // Best-effort cleanup of partial temp file
+                                cwd.deleteFile(t_path) catch {};
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (opts.verbose) {
+            try w.print("  Parsed metadata: {s}\n", .{meta.title});
+            try w.flush();
+        }
     }
 
     const all_chapters = if (rss_chapters.len > 0) rss_chapters else html_chapters;

@@ -30,6 +30,7 @@ pub const Options = struct {
     report: ?[]const u8,
     report_format: ReportFormat,
     include_positives: bool,
+    write_metadata: bool,
 
     pub const defaults = Options{
         .command = .help,
@@ -45,6 +46,7 @@ pub const Options = struct {
         .report = null,
         .report_format = .text,
         .include_positives = false,
+        .write_metadata = false,
     };
 };
 
@@ -145,6 +147,8 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
             }
         } else if (std.mem.eql(u8, arg, "--include-positives")) {
             opts.include_positives = true;
+        } else if (std.mem.eql(u8, arg, "--write-metadata")) {
+            opts.write_metadata = true;
         } else if (std.mem.startsWith(u8, arg, "-")) {
             return ParseError.UnknownOption;
         } else {
@@ -182,6 +186,7 @@ pub fn printHelp() !void {
         \\  --report <file>       Write a report to <file>
         \\  --report-format <fmt> Report format: text (default), markdown, html
         \\  --include-positives   Include successful links in the report
+        \\  --write-metadata      Write metadata alongside output (default: false)
         \\  -h, --help            Show this help
         \\  -v, --version         Show version
         \\

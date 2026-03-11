@@ -231,6 +231,12 @@ fn extractJsonString(allocator: std.mem.Allocator, data: []const u8, key: []cons
                         }
                         k += 12; // consumed two \uXXXX sequences
                     } else {
+                        // Reject lone low surrogates (0xDC00..0xDFFF). Treat them as invalid
+                        // rather than emitting malformed UTF-8.
+                        if (v >= 0xDC00 and v <= 0xDFFF) {
+                            allocator.free(out);
+                            return null;
+                        }
                         const codepoint: u32 = v;
                         if (codepoint <= 0x7F) {
                             out[out_idx] = @intCast(codepoint);
@@ -1090,6 +1096,8 @@ fn writeReaderPage(
     }
     try w.writeAll("</div>\n");
     try writeThemeControls(w);
+    // Close the .hero-top container opened earlier before starting the actions block
+    try w.writeAll("</div>\n");
     try w.writeAll("<div class=\"actions\">\n");
     const overview_file = if (index == 0) root_page_name else "index.html";
     const overview_href_attr = try encodeRelativeUrlAttribute(allocator, overview_file);
