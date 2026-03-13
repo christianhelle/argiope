@@ -503,7 +503,7 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
             reader_pages += 1;
         }
 
-        // Progress reporting every second or at completion
+        // Progress reporting every 100ms or at completion
         const current_time = std.time.milliTimestamp();
         if (current_time - last_report_time >= 100 or index == tree.nodes.items.len - 1) {
             var seq_pbuf: [256]u8 = undefined;
@@ -525,7 +525,6 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
         .reader_pages = reader_pages,
         .images = tree.nodes.items[0].total_images,
     };
-    //}
 }
 
 fn isImagePath(name: []const u8) bool {
