@@ -207,7 +207,10 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     try w.print("\nTiming:\n", .{});
     try w.print("  Total crawl time: {d}ms\n", .{crawl_elapsed_ms});
 
-    const browser_summary = try image_browser_mod.generate(allocator, opts.output_dir);
+    const browser_summary = try image_browser_mod.generate(
+        allocator,
+        opts.output_dir,
+    );
     try w.print("\nHTML browser:\n", .{});
     try w.print("  Landing page:     {s}/{s}\n", .{ opts.output_dir, image_browser_mod.root_page_name });
     try w.print("  Folder pages:     {d}\n", .{browser_summary.directories});

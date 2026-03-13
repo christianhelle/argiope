@@ -6,7 +6,10 @@ pub fn run(allocator: std.mem.Allocator, output_dir: []const u8) !u8 {
     var fw = std.fs.File.stdout().writer(&buf);
     const w = &fw.interface;
 
-    const summary = generate(allocator, output_dir) catch |err| {
+    const summary = generate(
+        allocator,
+        output_dir,
+    ) catch |err| {
         cli_mod.printError("Failed to generate library");
         if (err == error.FileNotFound) {
             cli_mod.printError("Directory not found");
@@ -420,21 +423,43 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
     var walker = try root_dir.walk(allocator);
     defer walker.deinit();
 
+    // Progress reporting for directory traversal
+    var dir_count: usize = 0;
+    var file_count: usize = 0;
+    var image_count: usize = 0;
+
     while (try walker.next()) |entry| {
         switch (entry.kind) {
-            .directory => _ = try tree.getOrAddDir(entry.path),
+            .directory => {
+                _ = try tree.getOrAddDir(entry.path);
+                dir_count += 1;
+                var pbuf: [256]u8 = undefined;
+                var fw = std.fs.File.stderr().writer(&pbuf);
+                fw.interface.print("\rScanned {d} directories, {d} files, {d} images...", .{ dir_count, file_count, image_count }) catch {};
+                fw.interface.flush() catch {};
+            },
             .file => {
+                file_count += 1;
                 if (isMetadataFile(entry.basename)) {
                     // handled after tree is built
                 } else if (isImagePath(entry.basename)) {
                     try tree.addImage(entry.path);
+                    image_count += 1;
                 }
             },
             else => {},
         }
     }
 
-    // After walking, load metadata for each directory
+    // Final progress update for directory traversal
+    var pbuf: [256]u8 = undefined;
+    var fw = std.fs.File.stderr().writer(&pbuf);
+    fw.interface.print("\rScanned {d} directories, {d} files, {d} images\n", .{ dir_count, file_count, image_count }) catch {};
+    fw.interface.flush() catch {};
+
+    // After walking, load metadata for each directory with progress
+    const total_dirs = tree.nodes.items.len;
+    var meta_loaded: usize = 0;
     for (tree.nodes.items, 0..) |_, idx| {
         const node = &tree.nodes.items[idx];
         const meta_result = readMetadataFile(allocator, root_dir, node.rel_path) catch continue;
@@ -443,14 +468,30 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
             meta_ptr.* = meta;
             node.metadata = meta_ptr;
         }
+        meta_loaded += 1;
+        if (meta_loaded % 50 == 0 or meta_loaded == total_dirs) {
+            var meta_pbuf: [256]u8 = undefined;
+            var meta_fw = std.fs.File.stderr().writer(&meta_pbuf);
+            meta_fw.interface.print("\rLoaded metadata for {d}/{d} directories...", .{ meta_loaded, total_dirs }) catch {};
+            meta_fw.interface.flush() catch {};
+        }
     }
+
+    // Final progress update for metadata loading
+    var meta_pbuf: [256]u8 = undefined;
+    var meta_fw = std.fs.File.stderr().writer(&meta_pbuf);
+    meta_fw.interface.print("\rLoaded metadata for {d}/{d} directories\n", .{ meta_loaded, total_dirs }) catch {};
+    meta_fw.interface.flush() catch {};
 
     tree.sortAndCount();
 
+    // Sequential processing (original implementation) with progress reporting
     var directories_with_pages: usize = 0;
     var reader_pages: usize = 0;
+    const total_nodes = tree.nodes.items.len;
 
     var index: usize = 0;
+    var last_report_time = std.time.milliTimestamp();
     while (index < tree.nodes.items.len) : (index += 1) {
         const node = tree.nodes.items[index];
         const page_name = if (index == 0) root_page_name else "index.html";
@@ -461,7 +502,23 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
             try writeReaderPage(allocator, root_dir, &tree, index, output_dir);
             reader_pages += 1;
         }
+
+        // Progress reporting every 100ms or at completion
+        const current_time = std.time.milliTimestamp();
+        if (current_time - last_report_time >= 100 or index == tree.nodes.items.len - 1) {
+            var seq_pbuf: [256]u8 = undefined;
+            var seq_fw = std.fs.File.stderr().writer(&seq_pbuf);
+            seq_fw.interface.print("\rGenerated {d}/{d} directory pages, {d}/{d} reader pages...", .{ directories_with_pages, total_nodes, reader_pages, total_nodes }) catch {};
+            seq_fw.interface.flush() catch {};
+            last_report_time = current_time;
+        }
     }
+
+    // Final progress update
+    var seq_final_pbuf: [256]u8 = undefined;
+    var seq_final_fw = std.fs.File.stderr().writer(&seq_final_pbuf);
+    seq_final_fw.interface.print("\rGenerated {d}/{d} directory pages, {d}/{d} reader pages\n\n", .{ directories_with_pages, total_nodes, reader_pages, total_nodes }) catch {};
+    seq_final_fw.interface.flush() catch {};
 
     return .{
         .directories = directories_with_pages,
