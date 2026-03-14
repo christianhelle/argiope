@@ -1,6 +1,6 @@
 name: argiope
 base: core22
-version: 0.2.4
+version: 0.3.5
 title: Argiope
 summary: A web crawler for broken-link detection and image downloading
 license: MIT
