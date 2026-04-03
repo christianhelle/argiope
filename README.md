@@ -28,6 +28,28 @@ A web crawler for broken-link detection and image downloading, written in [Zig](
 sudo snap install argiope
 ```
 
+### Install script (Linux / macOS)
+
+Downloads and installs the latest release binary to `~/.local/bin` (override with `INSTALL_DIR`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/christianhelle/argiope/main/install.sh | bash
+```
+
+Or with a custom install directory:
+
+```sh
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/christianhelle/argiope/main/install.sh | bash
+```
+
+### Install script (Windows)
+
+Downloads and installs the latest release binary to `%USERPROFILE%\.local\bin` and adds it to your user `PATH`:
+
+```powershell
+irm https://raw.githubusercontent.com/christianhelle/argiope/main/install.ps1 | iex
+```
+
 ### Download from GitHub Releases
 
 Pre-built binaries for Linux (x86_64, aarch64), macOS (x86_64, aarch64), and Windows (x86_64) are available on the [Releases](https://github.com/christianhelle/argiope/releases) page.
