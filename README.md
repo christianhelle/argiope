@@ -22,24 +22,18 @@ A web crawler for broken-link detection and image downloading, written in [Zig](
 
 ## Installation
 
-### Snap
-
-```sh
-sudo snap install argiope
-```
-
 ### Install script (Linux / macOS)
 
 Downloads and installs the latest release binary to `~/.local/bin` (override with `INSTALL_DIR`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/christianhelle/argiope/main/install.sh | bash
+curl -fsSL https://christianhelle.com/argiope/install | sh
 ```
 
 Or with a custom install directory:
 
-```sh
-INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/christianhelle/argiope/main/install.sh | bash
+```pwsh
+irm https://christianhelle.com/argiope/install.ps1 | iex
 ```
 
 ### Install script (Windows)
@@ -48,6 +42,14 @@ Downloads and installs the latest release binary to `%USERPROFILE%\.local\bin` a
 
 ```powershell
 irm https://raw.githubusercontent.com/christianhelle/argiope/main/install.ps1 | iex
+```
+
+### Snap
+
+Easy installation on Ubuntu and other distributions with snap support.
+
+```sh
+sudo snap install argiope
 ```
 
 ### Download from GitHub Releases
