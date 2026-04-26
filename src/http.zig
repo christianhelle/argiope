@@ -89,7 +89,7 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
                     break :blk location;
                 }
                 // Root-relative or path-relative: reconstruct from current URI.
-                const scheme = if (uri.port orelse 0 == 443) "https" else uri.scheme;
+                const scheme = if ((uri.port orelse 0) == 443) "https" else uri.scheme;
                 const host = switch (uri.host orelse std.Uri.Component{ .raw = "" }) {
                     .raw => |r| r,
                     .percent_encoded => |r| r,
@@ -139,7 +139,7 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
         // Read response body up to max_body_size to prevent OOM on large responses
         var transfer_buf: [8192]u8 = undefined;
         const reader = response.reader(&transfer_buf);
-        const body = reader.allocRemaining(allocator, std.io.Limit.limited(options.max_body_size)) catch
+        const body = reader.allocRemaining(allocator, .{ .limited = options.max_body_size }) catch
             (allocator.dupe(u8, "") catch return error.ConnectionFailed);
 
         return Response{
@@ -154,16 +154,12 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
 /// Check if a URL is reachable by sending a GET request.
 /// Returns the HTTP status code, or error if connection fails.
 pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOptions) !u16 {
-    _ = options;
-
     var client: std.http.Client = .{ .allocator = allocator };
     defer client.deinit();
 
-    const result = client.fetch(.{
-        .location = .{ .url = url_str },
-    }) catch return error.ConnectionFailed;
-
-    return @intFromEnum(result.status);
+    var response = fetch(&client, allocator, url_str, options) catch return error.ConnectionFailed;
+    defer response.deinit();
+    return response.status;
 }
 
 /// Check if a content-type header indicates HTML content.
