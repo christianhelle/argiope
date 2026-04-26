@@ -82,8 +82,14 @@ fn resolveRedirectUrl(uri: std.Uri, location: []const u8, location_buf: []u8) ![
         .percent_encoded => |path| path,
     };
     const dir_end = if (std.mem.lastIndexOf(u8, base_path, "/")) |i| i + 1 else 1;
-    try writer.print("{s}{s}", .{ base_path[0..dir_end], location });
+    const base_dir = if (std.mem.eql(u8, base_path, "/")) "/" else base_path[0..dir_end];
+    try writer.print("{s}{s}", .{ base_dir, location });
     return fbs.getWritten();
+}
+
+fn transitionResponseState(response: anytype) void {
+    var drain_buf: [8192]u8 = undefined;
+    _ = response.reader(&drain_buf);
 }
 
 /// Fetch a URL via GET, following redirects. Returns response with body.
@@ -141,8 +147,7 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
             // triggers defaultDiscard's assert(seek == end) when bytes are buffered.
             // Calling reader() here sets state to .body_none / .body_remaining_*,
             // causing deinit() to take the `else => closing = true` path instead.
-            var drain_buf: [8192]u8 = undefined;
-            _ = response.reader(&drain_buf);
+            transitionResponseState(&response);
 
             continue;
         }
@@ -214,14 +219,12 @@ pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: F
             }
 
             // Creating the reader is enough to leave .received_head; req.deinit() then closes without draining.
-            var redirect_drain_buf: [8192]u8 = undefined;
-            _ = response.reader(&redirect_drain_buf);
+            transitionResponseState(&response);
             continue;
         }
 
         // Creating the reader is enough to leave .received_head; req.deinit() then closes without draining.
-        var response_drain_buf: [8192]u8 = undefined;
-        _ = response.reader(&response_drain_buf);
+        transitionResponseState(&response);
         return status;
     }
 }
