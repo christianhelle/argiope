@@ -216,11 +216,13 @@ pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: F
                 current_url = new_url;
             }
 
+            // Move the request state out of .received_head so req.deinit() closes cleanly.
             var drain_buf: [8192]u8 = undefined;
             _ = response.reader(&drain_buf);
             continue;
         }
 
+        // Move the request state out of .received_head and let req.deinit() close the body.
         var drain_buf: [8192]u8 = undefined;
         _ = response.reader(&drain_buf);
         return status;
