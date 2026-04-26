@@ -52,10 +52,8 @@ fn resolveRedirectUrl(uri: std.Uri, location: []const u8, location_buf: []u8) ![
     }
 
     const scheme = uri.scheme;
-    const host = switch (uri.host orelse std.Uri.Component{ .raw = "" }) {
-        .raw => |r| r,
-        .percent_encoded => |r| r,
-    };
+    var host_buf: [std.Io.net.HostName.max_len]u8 = undefined;
+    const host = (uri.host orelse return error.ConnectionFailed).toRaw(&host_buf) catch return error.ConnectionFailed;
 
     if (std.mem.startsWith(u8, location, "//")) {
         var fbs = std.io.fixedBufferStream(location_buf);
@@ -77,10 +75,11 @@ fn resolveRedirectUrl(uri: std.Uri, location: []const u8, location_buf: []u8) ![
         return fbs.getWritten();
     }
 
-    const base_path = if (uri.path.isEmpty()) "/" else switch (uri.path) {
-        .raw => |path| path,
-        .percent_encoded => |path| path,
-    };
+    var path_buf: [4096]u8 = undefined;
+    const base_path = if (uri.path.isEmpty())
+        "/"
+    else
+        uri.path.toRaw(&path_buf) catch return error.ConnectionFailed;
     const dir_end = if (std.mem.lastIndexOf(u8, base_path, "/")) |i| i + 1 else 1;
     const base_dir = if (std.mem.eql(u8, base_path, "/")) "/" else base_path[0..dir_end];
     try writer.print("{s}{s}", .{ base_dir, location });
