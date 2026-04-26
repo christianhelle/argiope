@@ -44,6 +44,48 @@ pub const FetchOptions = struct {
     user_agent: ?[]const u8 = null,
 };
 
+fn resolveRedirectUrl(uri: std.Uri, location: []const u8, location_buf: []u8) ![]const u8 {
+    if (std.mem.startsWith(u8, location, "http://") or
+        std.mem.startsWith(u8, location, "https://"))
+    {
+        return location;
+    }
+
+    const scheme = if ((uri.port orelse 0) == 443) "https" else uri.scheme;
+    const host = switch (uri.host orelse std.Uri.Component{ .raw = "" }) {
+        .raw => |r| r,
+        .percent_encoded => |r| r,
+    };
+
+    if (std.mem.startsWith(u8, location, "//")) {
+        var fbs = std.io.fixedBufferStream(location_buf);
+        const writer = fbs.writer();
+        try writer.print("{s}:{s}", .{ scheme, location });
+        return fbs.getWritten();
+    }
+
+    var fbs = std.io.fixedBufferStream(location_buf);
+    const writer = fbs.writer();
+    if (uri.port) |port| {
+        try writer.print("{s}://{s}:{d}", .{ scheme, host, port });
+    } else {
+        try writer.print("{s}://{s}", .{ scheme, host });
+    }
+
+    if (location.len > 0 and location[0] == '/') {
+        try writer.writeAll(location);
+        return fbs.getWritten();
+    }
+
+    const base_path = if (uri.path.isEmpty()) "/" else switch (uri.path) {
+        .raw => |path| path,
+        .percent_encoded => |path| path,
+    };
+    const dir_end = if (std.mem.lastIndexOf(u8, base_path, "/")) |i| i + 1 else 1;
+    try writer.print("{s}{s}", .{ base_path[0..dir_end], location });
+    return fbs.getWritten();
+}
+
 /// Fetch a URL via GET, following redirects. Returns response with body.
 /// Caller owns the returned Response and must call deinit().
 /// Reuses the provided client for connection pooling across requests.
@@ -82,31 +124,7 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
             const location = response.head.location orelse return error.ConnectionFailed;
 
             // Resolve relative Location values against the current URL.
-            const new_url: []const u8 = blk: {
-                if (std.mem.startsWith(u8, location, "http://") or
-                    std.mem.startsWith(u8, location, "https://"))
-                {
-                    break :blk location;
-                }
-                // Root-relative or path-relative: reconstruct from current URI.
-                const scheme = if ((uri.port orelse 0) == 443) "https" else uri.scheme;
-                const host = switch (uri.host orelse std.Uri.Component{ .raw = "" }) {
-                    .raw => |r| r,
-                    .percent_encoded => |r| r,
-                };
-                const port = uri.port;
-                // scheme/host may alias location_buf when current_url was built
-                // from a previous redirect.  Build into a separate buffer first,
-                // then copy into location_buf to avoid @memcpy aliasing panics.
-                var build_buf: [4096]u8 = undefined;
-                const built = if (port) |p|
-                    std.fmt.bufPrint(&build_buf, "{s}://{s}:{d}{s}", .{ scheme, host, p, location }) catch return error.ConnectionFailed
-                else
-                    std.fmt.bufPrint(&build_buf, "{s}://{s}{s}", .{ scheme, host, location }) catch return error.ConnectionFailed;
-                if (built.len > location_buf.len) return error.ConnectionFailed;
-                @memcpy(location_buf[0..built.len], built);
-                break :blk location_buf[0..built.len];
-            };
+            const new_url = resolveRedirectUrl(uri, location, &location_buf) catch return error.ConnectionFailed;
 
             if (new_url.ptr != location_buf[0..].ptr) {
                 // absolute URL not yet in location_buf — copy it in
@@ -185,28 +203,7 @@ pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: F
             if (redirect_count > options.max_redirects) return error.TooManyRedirects;
 
             const location = response.head.location orelse return error.ConnectionFailed;
-            const new_url: []const u8 = blk: {
-                if (std.mem.startsWith(u8, location, "http://") or
-                    std.mem.startsWith(u8, location, "https://"))
-                {
-                    break :blk location;
-                }
-
-                const scheme = if ((uri.port orelse 0) == 443) "https" else uri.scheme;
-                const host = switch (uri.host orelse std.Uri.Component{ .raw = "" }) {
-                    .raw => |r| r,
-                    .percent_encoded => |r| r,
-                };
-                const port = uri.port;
-                var build_buf: [4096]u8 = undefined;
-                const built = if (port) |p|
-                    std.fmt.bufPrint(&build_buf, "{s}://{s}:{d}{s}", .{ scheme, host, p, location }) catch return error.ConnectionFailed
-                else
-                    std.fmt.bufPrint(&build_buf, "{s}://{s}{s}", .{ scheme, host, location }) catch return error.ConnectionFailed;
-                if (built.len > location_buf.len) return error.ConnectionFailed;
-                @memcpy(location_buf[0..built.len], built);
-                break :blk location_buf[0..built.len];
-            };
+            const new_url = resolveRedirectUrl(uri, location, &location_buf) catch return error.ConnectionFailed;
 
             if (new_url.ptr != location_buf[0..].ptr) {
                 if (new_url.len > location_buf.len) return error.ConnectionFailed;
@@ -217,14 +214,14 @@ pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: F
             }
 
             // Move the request state out of .received_head so req.deinit() closes cleanly.
-            var drain_buf: [8192]u8 = undefined;
-            _ = response.reader(&drain_buf);
+            var redirect_drain_buf: [8192]u8 = undefined;
+            _ = response.reader(&redirect_drain_buf);
             continue;
         }
 
         // Move the request state out of .received_head and let req.deinit() close the body.
-        var drain_buf: [8192]u8 = undefined;
-        _ = response.reader(&drain_buf);
+        var response_drain_buf: [8192]u8 = undefined;
+        _ = response.reader(&response_drain_buf);
         return status;
     }
 }
@@ -355,4 +352,32 @@ test "FetchOptions defaults" {
     try std.testing.expect(opts.max_redirects == 5);
     try std.testing.expect(opts.timeout_ms == 10_000);
     try std.testing.expect(opts.max_body_size == 10 * 1024 * 1024);
+}
+
+test "resolveRedirectUrl preserves absolute locations" {
+    const uri = try std.Uri.parse("https://example.com/base/page");
+    var buf: [256]u8 = undefined;
+    const resolved = try resolveRedirectUrl(uri, "https://cdn.example.com/image.png", &buf);
+    try std.testing.expectEqualStrings("https://cdn.example.com/image.png", resolved);
+}
+
+test "resolveRedirectUrl handles root-relative locations" {
+    const uri = try std.Uri.parse("https://example.com/base/page");
+    var buf: [256]u8 = undefined;
+    const resolved = try resolveRedirectUrl(uri, "/images/pic.jpg", &buf);
+    try std.testing.expectEqualStrings("https://example.com/images/pic.jpg", resolved);
+}
+
+test "resolveRedirectUrl handles path-relative locations" {
+    const uri = try std.Uri.parse("https://example.com/base/page");
+    var buf: [256]u8 = undefined;
+    const resolved = try resolveRedirectUrl(uri, "next/page.html", &buf);
+    try std.testing.expectEqualStrings("https://example.com/base/next/page.html", resolved);
+}
+
+test "resolveRedirectUrl handles protocol-relative locations" {
+    const uri = try std.Uri.parse("https://example.com/base/page");
+    var buf: [256]u8 = undefined;
+    const resolved = try resolveRedirectUrl(uri, "//cdn.example.com/image.png", &buf);
+    try std.testing.expectEqualStrings("https://cdn.example.com/image.png", resolved);
 }
