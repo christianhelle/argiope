@@ -88,6 +88,7 @@ fn resolveRedirectUrl(uri: std.Uri, location: []const u8, location_buf: []u8) ![
 }
 
 fn transitionResponseState(response: anytype) void {
+    // The buffer itself is unused; reader() needs scratch storage to move the response out of .received_head.
     var drain_buf: [8192]u8 = undefined;
     _ = response.reader(&drain_buf);
 }
@@ -162,7 +163,7 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
         // Read response body up to max_body_size to prevent OOM on large responses
         var transfer_buf: [8192]u8 = undefined;
         const reader = response.reader(&transfer_buf);
-        const body = reader.allocRemaining(allocator, .{ .limited = options.max_body_size }) catch
+        const body = reader.allocRemaining(allocator, std.io.Limit{ .limited = options.max_body_size }) catch
             (allocator.dupe(u8, "") catch return error.ConnectionFailed);
 
         return Response{
