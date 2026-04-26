@@ -85,7 +85,7 @@ parts:
       - curl
       - xz-utils
     override-build: |
-      snap install zig --classic --beta
+      snap install zig --classic --channel=latest/stable
 
   argiope:
     after: [zig]

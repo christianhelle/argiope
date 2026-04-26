@@ -10,7 +10,7 @@ help:
 
 # Build release binary optimized for speed
 build:
-	zig build --release=fast
+	zig build -Doptimize=ReleaseFast
 
 # Run all unit tests
 test:

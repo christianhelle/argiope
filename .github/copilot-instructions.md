@@ -1,6 +1,6 @@
 # argiope – Copilot Instructions
 
-`argiope` is a web crawler CLI tool written in Zig (minimum version 0.15.2) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`. The `images` command now also generates portable HTML browsing pages (root `library.html`, nested `index.html`, and per-folder `reader.html`) after downloads complete. Release automation updates `snapcraft.yaml` and `src/cli.zig` together.
+`argiope` is a web crawler CLI tool written in Zig (minimum version 0.16.0) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`. The `images` command now also generates portable HTML browsing pages (root `library.html`, nested `index.html`, and per-folder `reader.html`) after downloads complete. Release automation updates `snapcraft.yaml` and `src/cli.zig` together.
 
 ## Source Control and Documentation (MANDATORY)
 
@@ -27,7 +27,7 @@ make build                         # alternative via Makefile
 make test
 ```
 
-## Zig 0.15 API Notes
+## Zig 0.16 API Notes
 
 These are critical differences from older Zig versions:
 
