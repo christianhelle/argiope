@@ -157,9 +157,74 @@ pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: F
     var client: std.http.Client = .{ .allocator = allocator };
     defer client.deinit();
 
-    var response = fetch(&client, allocator, url_str, options) catch return error.ConnectionFailed;
-    defer response.deinit();
-    return response.status;
+    var redirect_count: u8 = 0;
+    var location_buf: [4096]u8 = undefined;
+    var current_url: []const u8 = url_str;
+
+    while (true) {
+        const uri = std.Uri.parse(current_url) catch return error.ConnectionFailed;
+
+        var req = client.request(.GET, uri, .{
+            .redirect_behavior = .unhandled,
+            .headers = .{
+                .accept_encoding = .{ .override = "identity" },
+                .user_agent = if (options.user_agent) |ua| .{ .override = ua } else .default,
+            },
+            .extra_headers = options.extra_headers,
+        }) catch return error.ConnectionFailed;
+        defer req.deinit();
+
+        req.sendBodiless() catch return error.ConnectionFailed;
+
+        var redirect_buf: [16 * 1024]u8 = undefined;
+        var response = req.receiveHead(&redirect_buf) catch return error.ConnectionFailed;
+        const status: u16 = @intFromEnum(response.head.status);
+
+        if (status >= 300 and status < 400) {
+            redirect_count += 1;
+            if (redirect_count > options.max_redirects) return error.TooManyRedirects;
+
+            const location = response.head.location orelse return error.ConnectionFailed;
+            const new_url: []const u8 = blk: {
+                if (std.mem.startsWith(u8, location, "http://") or
+                    std.mem.startsWith(u8, location, "https://"))
+                {
+                    break :blk location;
+                }
+
+                const scheme = if ((uri.port orelse 0) == 443) "https" else uri.scheme;
+                const host = switch (uri.host orelse std.Uri.Component{ .raw = "" }) {
+                    .raw => |r| r,
+                    .percent_encoded => |r| r,
+                };
+                const port = uri.port;
+                var build_buf: [4096]u8 = undefined;
+                const built = if (port) |p|
+                    std.fmt.bufPrint(&build_buf, "{s}://{s}:{d}{s}", .{ scheme, host, p, location }) catch return error.ConnectionFailed
+                else
+                    std.fmt.bufPrint(&build_buf, "{s}://{s}{s}", .{ scheme, host, location }) catch return error.ConnectionFailed;
+                if (built.len > location_buf.len) return error.ConnectionFailed;
+                @memcpy(location_buf[0..built.len], built);
+                break :blk location_buf[0..built.len];
+            };
+
+            if (new_url.ptr != location_buf[0..].ptr) {
+                if (new_url.len > location_buf.len) return error.ConnectionFailed;
+                @memcpy(location_buf[0..new_url.len], new_url);
+                current_url = location_buf[0..new_url.len];
+            } else {
+                current_url = new_url;
+            }
+
+            var drain_buf: [8192]u8 = undefined;
+            _ = response.reader(&drain_buf);
+            continue;
+        }
+
+        var drain_buf: [8192]u8 = undefined;
+        _ = response.reader(&drain_buf);
+        return status;
+    }
 }
 
 /// Check if a content-type header indicates HTML content.
