@@ -218,12 +218,12 @@ pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: F
                 current_url = new_url;
             }
 
-            // Creating the reader is enough to leave .received_head; req.deinit() then closes without draining.
+            // Transition the redirect response out of .received_head before req.deinit() closes it.
             transitionResponseState(&response);
             continue;
         }
 
-        // Creating the reader is enough to leave .received_head; req.deinit() then closes without draining.
+        // Transition the final response out of .received_head before returning the status code.
         transitionResponseState(&response);
         return status;
     }
