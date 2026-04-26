@@ -378,6 +378,13 @@ test "resolveRedirectUrl handles path-relative locations" {
     try std.testing.expectEqualStrings("https://example.com/base/next/page.html", resolved);
 }
 
+test "resolveRedirectUrl handles root base paths" {
+    const uri = try std.Uri.parse("https://example.com/");
+    var buf: [256]u8 = undefined;
+    const resolved = try resolveRedirectUrl(uri, "next/page.html", &buf);
+    try std.testing.expectEqualStrings("https://example.com/next/page.html", resolved);
+}
+
 test "resolveRedirectUrl handles protocol-relative locations" {
     const uri = try std.Uri.parse("https://example.com/base/page");
     var buf: [256]u8 = undefined;
