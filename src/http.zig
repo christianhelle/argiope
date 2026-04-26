@@ -51,7 +51,7 @@ fn resolveRedirectUrl(uri: std.Uri, location: []const u8, location_buf: []u8) ![
         return location;
     }
 
-    const scheme = if ((uri.port orelse 0) == 443) "https" else uri.scheme;
+    const scheme = uri.scheme;
     const host = switch (uri.host orelse std.Uri.Component{ .raw = "" }) {
         .raw => |r| r,
         .percent_encoded => |r| r,
@@ -213,13 +213,13 @@ pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: F
                 current_url = new_url;
             }
 
-            // Move the request state out of .received_head so req.deinit() closes cleanly.
+            // Creating the reader is enough to leave .received_head; req.deinit() then closes without draining.
             var redirect_drain_buf: [8192]u8 = undefined;
             _ = response.reader(&redirect_drain_buf);
             continue;
         }
 
-        // Move the request state out of .received_head and let req.deinit() close the body.
+        // Creating the reader is enough to leave .received_head; req.deinit() then closes without draining.
         var response_drain_buf: [8192]u8 = undefined;
         _ = response.reader(&response_drain_buf);
         return status;
