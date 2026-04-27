@@ -86,7 +86,13 @@ parts:
       - xz-utils
     override-build: |
       mkdir -p "$SNAPCRAFT_STAGE/zig"
-      curl -fsSL https://ziglang.org/download/0.16.0/zig-linux-x86_64-0.16.0.tar.xz | tar xJ -C "$SNAPCRAFT_STAGE/zig" --strip-components=1
+      arch="$(uname -m)"
+      case "$arch" in
+        x86_64) zig_arch="x86_64" ;;
+        aarch64) zig_arch="aarch64" ;;
+        *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
+      esac
+      curl -fsSL "https://ziglang.org/download/0.16.0/zig-linux-${zig_arch}-0.16.0.tar.xz" | tar xJ -C "$SNAPCRAFT_STAGE/zig" --strip-components=1
 
   argiope:
     after: [zig]
