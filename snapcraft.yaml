@@ -85,6 +85,8 @@ parts:
       - curl
       - xz-utils
     override-build: |
+      zig_version="0.16.0"
+      zig_tarball="/tmp/zig-${zig_version}.tar.xz"
       mkdir -p "$SNAPCRAFT_STAGE/zig"
       arch="$(uname -m)"
       case "$arch" in
@@ -92,8 +94,9 @@ parts:
         aarch64) zig_arch="aarch64" ;;
         *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
       esac
-      curl -fsSLo /tmp/zig-0.16.0.tar.xz "https://ziglang.org/download/0.16.0/zig-linux-${zig_arch}-0.16.0.tar.xz"
-      tar xJ -C "$SNAPCRAFT_STAGE/zig" --strip-components=1 -f /tmp/zig-0.16.0.tar.xz
+      curl -fsSLo "$zig_tarball" "https://ziglang.org/download/${zig_version}/zig-linux-${zig_arch}-${zig_version}.tar.xz"
+      tar xJ -C "$SNAPCRAFT_STAGE/zig" --strip-components=1 -f "$zig_tarball"
+      rm "$zig_tarball"
 
   argiope:
     after: [zig]
