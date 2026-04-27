@@ -92,7 +92,8 @@ parts:
         aarch64) zig_arch="aarch64" ;;
         *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
       esac
-      curl -fsSL "https://ziglang.org/download/0.16.0/zig-linux-${zig_arch}-0.16.0.tar.xz" | tar xJ -C "$SNAPCRAFT_STAGE/zig" --strip-components=1
+      curl -fsSLo /tmp/zig-0.16.0.tar.xz "https://ziglang.org/download/0.16.0/zig-linux-${zig_arch}-0.16.0.tar.xz"
+      tar xJ -C "$SNAPCRAFT_STAGE/zig" --strip-components=1 -f /tmp/zig-0.16.0.tar.xz
 
   argiope:
     after: [zig]
