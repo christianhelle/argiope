@@ -27,7 +27,7 @@ make build                         # alternative via Makefile
 make test
 ```
 
-## Zig 0.15 API Notes
+## Zig 0.16 API Notes
 
 These are critical differences from older Zig versions:
 

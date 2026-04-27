@@ -85,7 +85,8 @@ parts:
       - curl
       - xz-utils
     override-build: |
-      snap install zig --classic --beta
+      mkdir -p "$SNAPCRAFT_STAGE/zig"
+      curl -fsSL https://ziglang.org/download/0.16.0/zig-linux-x86_64-0.16.0.tar.xz | tar xJ -C "$SNAPCRAFT_STAGE/zig" --strip-components=1
 
   argiope:
     after: [zig]
