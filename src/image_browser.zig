@@ -1,18 +1,19 @@
 const std = @import("std");
 const cli_mod = @import("cli.zig");
 
-pub fn run(allocator: std.mem.Allocator, output_dir: []const u8) !u8 {
+pub fn run(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8) !u8 {
     var buf: [4096]u8 = undefined;
-    var fw = std.fs.File.stdout().writer(&buf);
+    var fw = std.Io.File.stdout().writer(io, &buf);
     const w = &fw.interface;
 
     const summary = generate(
+        io,
         allocator,
         output_dir,
     ) catch |err| {
-        cli_mod.printError("Failed to generate library");
+        cli_mod.printError(io, "Failed to generate library");
         if (err == error.FileNotFound) {
-            cli_mod.printError("Directory not found");
+            cli_mod.printError(io, "Directory not found");
         }
         return 1;
     };
@@ -65,14 +66,14 @@ fn hexVal(b: u8) ?u32 {
     return null;
 }
 
-fn readMetadataFile(allocator: std.mem.Allocator, root_dir: std.fs.Dir, rel_path: []const u8) !?MangaMetadata {
+fn readMetadataFile(io: std.Io, allocator: std.mem.Allocator, root_dir: std.Io.Dir, rel_path: []const u8) !?MangaMetadata {
     const meta_path = if (rel_path.len == 0)
         metadata_filename
     else
         try std.fmt.allocPrint(allocator, "{s}/{s}", .{ rel_path, metadata_filename });
     defer if (rel_path.len != 0) allocator.free(meta_path);
 
-    const data = root_dir.readFileAlloc(allocator, meta_path, 65536) catch return null;
+    const data = root_dir.readFileAlloc(io, meta_path, allocator, .limited(65536)) catch return null;
     defer allocator.free(data);
 
     // Extract and allocate unescaped strings directly from the metadata file
@@ -407,15 +408,15 @@ const SiteTree = struct {
     }
 };
 
-pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
-    const cwd = std.fs.cwd();
-    cwd.makePath(output_dir) catch |err| switch (err) {
+pub fn generate(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
+    const cwd = std.Io.Dir.cwd();
+    cwd.createDirPath(io, output_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
 
-    var root_dir = try cwd.openDir(output_dir, .{ .iterate = true });
-    defer root_dir.close();
+    var root_dir = try cwd.openDir(io, output_dir, .{ .iterate = true });
+    defer root_dir.close(io);
 
     var tree = try SiteTree.init(allocator);
     defer tree.deinit();
@@ -428,13 +429,13 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
     var file_count: usize = 0;
     var image_count: usize = 0;
 
-    while (try walker.next()) |entry| {
+    while (try walker.next(io)) |entry| {
         switch (entry.kind) {
             .directory => {
                 _ = try tree.getOrAddDir(entry.path);
                 dir_count += 1;
                 var pbuf: [256]u8 = undefined;
-                var fw = std.fs.File.stderr().writer(&pbuf);
+                var fw = std.Io.File.stderr().writer(io, &pbuf);
                 fw.interface.print("\rScanned {d} directories, {d} files, {d} images...", .{ dir_count, file_count, image_count }) catch {};
                 fw.interface.flush() catch {};
             },
@@ -453,7 +454,7 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
 
     // Final progress update for directory traversal
     var pbuf: [256]u8 = undefined;
-    var fw = std.fs.File.stderr().writer(&pbuf);
+    var fw = std.Io.File.stderr().writer(io, &pbuf);
     fw.interface.print("\rScanned {d} directories, {d} files, {d} images\n", .{ dir_count, file_count, image_count }) catch {};
     fw.interface.flush() catch {};
 
@@ -462,7 +463,7 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
     var meta_loaded: usize = 0;
     for (tree.nodes.items, 0..) |_, idx| {
         const node = &tree.nodes.items[idx];
-        const meta_result = readMetadataFile(allocator, root_dir, node.rel_path) catch continue;
+        const meta_result = readMetadataFile(io, allocator, root_dir, node.rel_path) catch continue;
         if (meta_result) |meta| {
             const meta_ptr = allocator.create(MangaMetadata) catch continue;
             meta_ptr.* = meta;
@@ -471,7 +472,7 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
         meta_loaded += 1;
         if (meta_loaded % 50 == 0 or meta_loaded == total_dirs) {
             var meta_pbuf: [256]u8 = undefined;
-            var meta_fw = std.fs.File.stderr().writer(&meta_pbuf);
+            var meta_fw = std.Io.File.stderr().writer(io, &meta_pbuf);
             meta_fw.interface.print("\rLoaded metadata for {d}/{d} directories...", .{ meta_loaded, total_dirs }) catch {};
             meta_fw.interface.flush() catch {};
         }
@@ -479,7 +480,7 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
 
     // Final progress update for metadata loading
     var meta_pbuf: [256]u8 = undefined;
-    var meta_fw = std.fs.File.stderr().writer(&meta_pbuf);
+    var meta_fw = std.Io.File.stderr().writer(io, &meta_pbuf);
     meta_fw.interface.print("\rLoaded metadata for {d}/{d} directories\n", .{ meta_loaded, total_dirs }) catch {};
     meta_fw.interface.flush() catch {};
 
@@ -491,23 +492,23 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
     const total_nodes = tree.nodes.items.len;
 
     var index: usize = 0;
-    var last_report_time = std.time.milliTimestamp();
+    var last_report_time = std.Io.Timestamp.now(io, .awake).toMilliseconds();
     while (index < tree.nodes.items.len) : (index += 1) {
         const node = tree.nodes.items[index];
         const page_name = if (index == 0) root_page_name else "index.html";
-        try writeDirectoryPage(allocator, root_dir, &tree, index, page_name, output_dir);
+        try writeDirectoryPage(io, allocator, root_dir, &tree, index, page_name, output_dir);
         directories_with_pages += 1;
 
         if (node.images.items.len > 0) {
-            try writeReaderPage(allocator, root_dir, &tree, index, output_dir);
+            try writeReaderPage(io, allocator, root_dir, &tree, index, output_dir);
             reader_pages += 1;
         }
 
         // Progress reporting every 100ms or at completion
-        const current_time = std.time.milliTimestamp();
+        const current_time = std.Io.Timestamp.now(io, .awake).toMilliseconds();
         if (current_time - last_report_time >= 100 or index == tree.nodes.items.len - 1) {
             var seq_pbuf: [256]u8 = undefined;
-            var seq_fw = std.fs.File.stderr().writer(&seq_pbuf);
+            var seq_fw = std.Io.File.stderr().writer(io, &seq_pbuf);
             seq_fw.interface.print("\rGenerated {d}/{d} directory pages, {d}/{d} reader pages...", .{ directories_with_pages, total_nodes, reader_pages, total_nodes }) catch {};
             seq_fw.interface.flush() catch {};
             last_report_time = current_time;
@@ -516,7 +517,7 @@ pub fn generate(allocator: std.mem.Allocator, output_dir: []const u8) !Summary {
 
     // Final progress update
     var seq_final_pbuf: [256]u8 = undefined;
-    var seq_final_fw = std.fs.File.stderr().writer(&seq_final_pbuf);
+    var seq_final_fw = std.Io.File.stderr().writer(io, &seq_final_pbuf);
     seq_final_fw.interface.print("\rGenerated {d}/{d} directory pages, {d}/{d} reader pages\n\n", .{ directories_with_pages, total_nodes, reader_pages, total_nodes }) catch {};
     seq_final_fw.interface.flush() catch {};
 
@@ -1002,8 +1003,9 @@ fn writeBreadcrumbs(allocator: std.mem.Allocator, w: anytype, tree: *const SiteT
 }
 
 fn writeDirectoryPage(
+    io: std.Io,
     allocator: std.mem.Allocator,
-    root_dir: std.fs.Dir,
+    root_dir: std.Io.Dir,
     tree: *const SiteTree,
     index: usize,
     page_name: []const u8,
@@ -1013,11 +1015,11 @@ fn writeDirectoryPage(
     const file_path = try targetPath(allocator, node.rel_path, page_name);
     defer allocator.free(file_path);
 
-    const file = try root_dir.createFile(file_path, .{ .truncate = true });
-    defer file.close();
+    const file = try root_dir.createFile(io, file_path, .{ .truncate = true });
+    defer file.close(io);
 
     var buffer: [65536]u8 = undefined;
-    var fw = file.writer(&buffer);
+    var fw = file.writer(io, &buffer);
     const w = &fw.interface;
 
     const title = if (index == 0)
@@ -1127,8 +1129,9 @@ fn writeDirectoryPage(
 }
 
 fn writeReaderPage(
+    io: std.Io,
     allocator: std.mem.Allocator,
-    root_dir: std.fs.Dir,
+    root_dir: std.Io.Dir,
     tree: *const SiteTree,
     index: usize,
     output_dir: []const u8,
@@ -1137,11 +1140,11 @@ fn writeReaderPage(
     const file_path = try targetPath(allocator, node.rel_path, "reader.html");
     defer allocator.free(file_path);
 
-    const file = try root_dir.createFile(file_path, .{ .truncate = true });
-    defer file.close();
+    const file = try root_dir.createFile(io, file_path, .{ .truncate = true });
+    defer file.close(io);
 
     var buffer: [65536]u8 = undefined;
-    var fw = file.writer(&buffer);
+    var fw = file.writer(io, &buffer);
     const w = &fw.interface;
 
     const metadata = findNearestMetadata(tree, index);
@@ -1400,25 +1403,25 @@ test "generate creates root, nested indexes, and reader pages" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    try tmp.dir.makePath("page_10");
-    try tmp.dir.makePath("page_2");
-    try tmp.dir.makePath("manga/10");
-    try tmp.dir.makePath("manga/2");
-    try tmp.dir.writeFile(.{ .sub_path = "page_10/10.jpg", .data = "ten" });
-    try tmp.dir.writeFile(.{ .sub_path = "page_2/2.jpg", .data = "two" });
-    try tmp.dir.writeFile(.{ .sub_path = "manga/10/010.jpg", .data = "010" });
-    try tmp.dir.writeFile(.{ .sub_path = "manga/2/001.jpg", .data = "001" });
-    try tmp.dir.writeFile(.{ .sub_path = "manga/2/010.jpg", .data = "010" });
+    try tmp.dir.createDirPath(std.testing.io, "page_10");
+    try tmp.dir.createDirPath(std.testing.io, "page_2");
+    try tmp.dir.createDirPath(std.testing.io, "manga/10");
+    try tmp.dir.createDirPath(std.testing.io, "manga/2");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "page_10/10.jpg", .data = "ten" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "page_2/2.jpg", .data = "two" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "manga/10/010.jpg", .data = "010" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "manga/2/001.jpg", .data = "001" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "manga/2/010.jpg", .data = "010" });
 
-    const root_path = try tmp.dir.realpathAlloc(allocator, ".");
-    defer allocator.free(root_path);
+    var root_path_buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const root_path = root_path_buf[0..try tmp.dir.realPath(std.testing.io, &root_path_buf)];
 
-    const summary = try generate(allocator, root_path);
+    const summary = try generate(std.testing.io, allocator, root_path);
     try std.testing.expectEqual(@as(usize, 5), summary.images);
     try std.testing.expect(summary.directories >= 5);
     try std.testing.expect(summary.reader_pages >= 4);
 
-    const library_html = try tmp.dir.readFileAlloc(allocator, root_page_name, 65536);
+    const library_html = try tmp.dir.readFileAlloc(std.testing.io, root_page_name, allocator, .limited(65536));
     defer allocator.free(library_html);
     try std.testing.expect(std.mem.indexOf(u8, library_html, "data-theme-value=\"system\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, library_html, "localStorage") != null);
@@ -1427,9 +1430,9 @@ test "generate creates root, nested indexes, and reader pages" {
     const page_2_pos = std.mem.indexOfPos(u8, library_html, 0, "page_2/index.html").?;
     const page_10_pos = std.mem.indexOfPos(u8, library_html, 0, "page_10/index.html").?;
     try std.testing.expect(page_2_pos < page_10_pos);
-    try std.testing.expectError(error.FileNotFound, tmp.dir.openFile("index.html", .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.openFile(std.testing.io, "index.html", .{}));
 
-    const manga_index = try tmp.dir.readFileAlloc(allocator, "manga/index.html", 65536);
+    const manga_index = try tmp.dir.readFileAlloc(std.testing.io, "manga/index.html", allocator, .limited(65536));
     defer allocator.free(manga_index);
     try std.testing.expect(std.mem.indexOf(u8, manga_index, "2/index.html") != null);
     try std.testing.expect(std.mem.indexOf(u8, manga_index, "10/index.html") != null);
@@ -1437,12 +1440,12 @@ test "generate creates root, nested indexes, and reader pages" {
     const chapter_10_pos = std.mem.indexOfPos(u8, manga_index, 0, "10/index.html").?;
     try std.testing.expect(chapter_2_pos < chapter_10_pos);
 
-    const chapter_index = try tmp.dir.readFileAlloc(allocator, "manga/2/index.html", 65536);
+    const chapter_index = try tmp.dir.readFileAlloc(std.testing.io, "manga/2/index.html", allocator, .limited(65536));
     defer allocator.free(chapter_index);
     try std.testing.expect(std.mem.indexOf(u8, chapter_index, "../../library.html") != null);
     try std.testing.expect(std.mem.indexOf(u8, chapter_index, "reader.html#1") != null);
 
-    const reader_html = try tmp.dir.readFileAlloc(allocator, "manga/2/reader.html", 65536);
+    const reader_html = try tmp.dir.readFileAlloc(std.testing.io, "manga/2/reader.html", allocator, .limited(65536));
     defer allocator.free(reader_html);
     try std.testing.expect(std.mem.indexOf(u8, reader_html, "#1") != null);
     try std.testing.expect(std.mem.indexOf(u8, reader_html, "ArrowRight") != null);
@@ -1463,16 +1466,16 @@ test "generate encodes unsafe filenames and folder names in HTML attributes" {
     const dir_name = "gallery & 'special' #1";
     const file_name = "cover 'special' & 100% #1.png";
 
-    try tmp.dir.makePath(dir_name);
-    try tmp.dir.writeFile(.{
+    try tmp.dir.createDirPath(std.testing.io, dir_name);
+    try tmp.dir.writeFile(std.testing.io, .{
         .sub_path = dir_name ++ "/" ++ file_name,
         .data = "image",
     });
 
-    const root_path = try tmp.dir.realpathAlloc(allocator, ".");
-    defer allocator.free(root_path);
+    var root_path_buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const root_path = root_path_buf[0..try tmp.dir.realPath(std.testing.io, &root_path_buf)];
 
-    const summary = try generate(allocator, root_path);
+    const summary = try generate(std.testing.io, allocator, root_path);
     try std.testing.expectEqual(@as(usize, 1), summary.images);
     try std.testing.expect(summary.directories >= 2);
     try std.testing.expect(summary.reader_pages >= 1);
@@ -1486,21 +1489,21 @@ test "generate encodes unsafe filenames and folder names in HTML attributes" {
     const encoded_dir = "gallery%20%26%20%27special%27%20%231";
     const encoded_image = "cover%20%27special%27%20%26%20100%25%20%231.png";
 
-    const library_html = try tmp.dir.readFileAlloc(allocator, root_page_name, 65536);
+    const library_html = try tmp.dir.readFileAlloc(std.testing.io, root_page_name, allocator, .limited(65536));
     defer allocator.free(library_html);
     try std.testing.expect(std.mem.indexOf(u8, library_html, encoded_dir ++ "/index.html") != null);
     try std.testing.expect(std.mem.indexOf(u8, library_html, encoded_dir ++ "/reader.html#1") != null);
     // HTML escaping: & -> &amp;, ' -> &#39;
     try std.testing.expect(std.mem.indexOf(u8, library_html, "gallery &amp; &#39;special&#39; #1") != null);
 
-    const folder_index = try tmp.dir.readFileAlloc(allocator, dir_name ++ "/index.html", 65536);
+    const folder_index = try tmp.dir.readFileAlloc(std.testing.io, dir_name ++ "/index.html", allocator, .limited(65536));
     defer allocator.free(folder_index);
     try std.testing.expect(std.mem.indexOf(u8, folder_index, "src=\"" ++ encoded_image ++ "\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, folder_index, "src=\"cover 'special' & 100% #1.png\"") == null);
     // Check for escaped name (e.g. in alt attribute)
     try std.testing.expect(std.mem.indexOf(u8, folder_index, "cover &#39;special&#39; &amp; 100% #1.png") != null);
 
-    const reader_html = try tmp.dir.readFileAlloc(allocator, dir_name ++ "/reader.html", 65536);
+    const reader_html = try tmp.dir.readFileAlloc(std.testing.io, dir_name ++ "/reader.html", allocator, .limited(65536));
     defer allocator.free(reader_html);
     try std.testing.expect(std.mem.indexOf(u8, reader_html, "data-src=\"" ++ encoded_image ++ "\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, reader_html, "src=\"" ++ encoded_image ++ "\"") != null);
@@ -1512,30 +1515,30 @@ test "generate links next and previous chapters" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    try tmp.dir.makePath("manga/ch1");
-    try tmp.dir.makePath("manga/ch2");
-    try tmp.dir.makePath("manga/ch3");
+    try tmp.dir.createDirPath(std.testing.io, "manga/ch1");
+    try tmp.dir.createDirPath(std.testing.io, "manga/ch2");
+    try tmp.dir.createDirPath(std.testing.io, "manga/ch3");
 
-    try tmp.dir.writeFile(.{ .sub_path = "manga/ch1/1.jpg", .data = "img" });
-    try tmp.dir.writeFile(.{ .sub_path = "manga/ch2/1.jpg", .data = "img" });
-    try tmp.dir.writeFile(.{ .sub_path = "manga/ch3/1.jpg", .data = "img" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "manga/ch1/1.jpg", .data = "img" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "manga/ch2/1.jpg", .data = "img" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "manga/ch3/1.jpg", .data = "img" });
 
-    const root_path = try tmp.dir.realpathAlloc(allocator, ".");
-    defer allocator.free(root_path);
+    var root_path_buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const root_path = root_path_buf[0..try tmp.dir.realPath(std.testing.io, &root_path_buf)];
 
-    _ = try generate(allocator, root_path);
+    _ = try generate(std.testing.io, allocator, root_path);
 
-    const ch1_reader = try tmp.dir.readFileAlloc(allocator, "manga/ch1/reader.html", 65536);
+    const ch1_reader = try tmp.dir.readFileAlloc(std.testing.io, "manga/ch1/reader.html", allocator, .limited(65536));
     defer allocator.free(ch1_reader);
     try std.testing.expect(std.mem.indexOf(u8, ch1_reader, "const nextChapter = \"../ch2/reader.html\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, ch1_reader, "const prevChapter = null") != null);
 
-    const ch2_reader = try tmp.dir.readFileAlloc(allocator, "manga/ch2/reader.html", 65536);
+    const ch2_reader = try tmp.dir.readFileAlloc(std.testing.io, "manga/ch2/reader.html", allocator, .limited(65536));
     defer allocator.free(ch2_reader);
     try std.testing.expect(std.mem.indexOf(u8, ch2_reader, "const nextChapter = \"../ch3/reader.html\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, ch2_reader, "const prevChapter = \"../ch1/reader.html#1\"") != null);
 
-    const ch3_reader = try tmp.dir.readFileAlloc(allocator, "manga/ch3/reader.html", 65536);
+    const ch3_reader = try tmp.dir.readFileAlloc(std.testing.io, "manga/ch3/reader.html", allocator, .limited(65536));
     defer allocator.free(ch3_reader);
     try std.testing.expect(std.mem.indexOf(u8, ch3_reader, "const nextChapter = null") != null);
     try std.testing.expect(std.mem.indexOf(u8, ch3_reader, "const prevChapter = \"../ch2/reader.html#1\"") != null);

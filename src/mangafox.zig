@@ -309,31 +309,32 @@ fn escapeJsonString(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
 }
 
 fn writeMetadataJson(allocator: std.mem.Allocator, metadata: *MangaMetadata) ![]u8 {
-    var list: std.ArrayListUnmanaged(u8) = .empty;
-    defer list.deinit(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    defer aw.deinit();
+    const writer = &aw.writer;
 
-    try list.appendSlice(allocator, "{\n");
-    try list.appendSlice(allocator, "  \"version\": 1,\n");
-    try list.appendSlice(allocator, "  \"source\": \"mangafox\",\n");
+    try writer.writeAll("{\n");
+    try writer.writeAll("  \"version\": 1,\n");
+    try writer.writeAll("  \"source\": \"mangafox\",\n");
 
     const escaped_slug = try escapeJsonString(allocator, metadata.slug);
     defer allocator.free(escaped_slug);
-    try list.writer(allocator).print("  \"slug\": \"{s}\",\n", .{escaped_slug});
+    try writer.print("  \"slug\": \"{s}\",\n", .{escaped_slug});
 
     const escaped_title = try escapeJsonString(allocator, metadata.title);
     defer allocator.free(escaped_title);
-    try list.writer(allocator).print("  \"title\": \"{s}\",\n", .{escaped_title});
+    try writer.print("  \"title\": \"{s}\",\n", .{escaped_title});
 
     if (metadata.synopsis) |syn| {
         const escaped_syn = try escapeJsonString(allocator, syn);
         defer allocator.free(escaped_syn);
-        try list.writer(allocator).print("  \"synopsis\": \"{s}\"\n", .{escaped_syn});
+        try writer.print("  \"synopsis\": \"{s}\"\n", .{escaped_syn});
     } else {
-        try list.appendSlice(allocator, "  \"synopsis\": null\n");
+        try writer.writeAll("  \"synopsis\": null\n");
     }
-    try list.appendSlice(allocator, "}\n");
+    try writer.writeAll("}\n");
 
-    return list.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 /// Extract the manga slug from a fanfox.net URL.
@@ -363,6 +364,7 @@ pub fn isValidSlug(slug: []const u8) bool {
 /// Returns an owned slice; caller frees each item's fields and the slice itself.
 /// If verbose is true, logs all examined hrefs and rejection reasons to stderr for debugging.
 pub fn parseChapterList(
+    io: std.Io,
     allocator: std.mem.Allocator,
     html: []const u8,
     slug: []const u8,
@@ -387,7 +389,7 @@ pub fn parseChapterList(
 
     if (verbose) {
         var err_buf: [256]u8 = undefined;
-        var efw = std.fs.File.stderr().writer(&err_buf);
+        var efw = std.Io.File.stderr().writer(io, &err_buf);
         efw.interface.print("[parseChapterList] Searching for pattern: {s}\n", .{prefix}) catch {};
         efw.interface.flush() catch {};
     }
@@ -422,7 +424,7 @@ pub fn parseChapterList(
         if (std.mem.indexOf(u8, href, prefix) == null) {
             if (verbose and href_count <= 10) {
                 var err_buf: [512]u8 = undefined;
-                var efw = std.fs.File.stderr().writer(&err_buf);
+                var efw = std.Io.File.stderr().writer(io, &err_buf);
                 efw.interface.print("  href #{d}: no prefix match: {s}\n", .{ href_count, href }) catch {};
                 efw.interface.flush() catch {};
             }
@@ -435,7 +437,7 @@ pub fn parseChapterList(
         const c_pos = std.mem.indexOf(u8, href, c_needle) orelse {
             if (verbose and href_count <= 20) {
                 var err_buf: [512]u8 = undefined;
-                var efw = std.fs.File.stderr().writer(&err_buf);
+                var efw = std.Io.File.stderr().writer(io, &err_buf);
                 efw.interface.print("  href #{d}: no /c pattern: {s}\n", .{ href_count, href }) catch {};
                 efw.interface.flush() catch {};
             }
@@ -447,7 +449,7 @@ pub fn parseChapterList(
         if (after_c_pos >= href.len or href[after_c_pos] < '0' or href[after_c_pos] > '9') {
             if (verbose and href_count <= 20) {
                 var err_buf: [512]u8 = undefined;
-                var efw = std.fs.File.stderr().writer(&err_buf);
+                var efw = std.Io.File.stderr().writer(io, &err_buf);
                 efw.interface.print("  href #{d}: /c not followed by digit: {s}\n", .{ href_count, href }) catch {};
                 efw.interface.flush() catch {};
             }
@@ -473,7 +475,7 @@ pub fn parseChapterList(
         if (num_end == 0) {
             if (verbose and href_count <= 20) {
                 var err_buf: [512]u8 = undefined;
-                var efw = std.fs.File.stderr().writer(&err_buf);
+                var efw = std.Io.File.stderr().writer(io, &err_buf);
                 efw.interface.print("  href #{d}: empty number after /c: {s}\n", .{ href_count, href }) catch {};
                 efw.interface.flush() catch {};
             }
@@ -485,7 +487,7 @@ pub fn parseChapterList(
         if (!looksLikeNumber(number_str)) {
             if (verbose and href_count <= 20) {
                 var err_buf: [512]u8 = undefined;
-                var efw = std.fs.File.stderr().writer(&err_buf);
+                var efw = std.Io.File.stderr().writer(io, &err_buf);
                 efw.interface.print("  href #{d}: invalid number format '{s}': {s}\n", .{ href_count, number_str, href }) catch {};
                 efw.interface.flush() catch {};
             }
@@ -520,7 +522,7 @@ pub fn parseChapterList(
         if (found) {
             if (verbose and href_count <= 20) {
                 var err_buf: [256]u8 = undefined;
-                var efw = std.fs.File.stderr().writer(&err_buf);
+                var efw = std.Io.File.stderr().writer(io, &err_buf);
                 efw.interface.print("  href #{d}: duplicate chapter {s}\n", .{ href_count, number_copy }) catch {};
                 efw.interface.flush() catch {};
             }
@@ -531,7 +533,7 @@ pub fn parseChapterList(
 
         if (verbose and href_count <= 20) {
             var err_buf: [256]u8 = undefined;
-            var efw = std.fs.File.stderr().writer(&err_buf);
+            var efw = std.Io.File.stderr().writer(io, &err_buf);
             efw.interface.print("  href #{d}: MATCHED chapter {s}\n", .{ href_count, number_copy }) catch {};
             efw.interface.flush() catch {};
         }
@@ -544,7 +546,7 @@ pub fn parseChapterList(
 
     if (verbose) {
         var err_buf: [256]u8 = undefined;
-        var efw = std.fs.File.stderr().writer(&err_buf);
+        var efw = std.Io.File.stderr().writer(io, &err_buf);
         efw.interface.print("[parseChapterList] Total hrefs examined: {d}, chapters found: {d}\n", .{ href_count, chapters.items.len }) catch {};
         efw.interface.flush() catch {};
     }
@@ -557,6 +559,7 @@ pub fn parseChapterList(
 /// Returns an owned slice; caller frees each item's fields and the slice itself.
 /// If verbose is true, logs parsing diagnostics to stderr.
 pub fn parseChapterListFromRss(
+    io: std.Io,
     allocator: std.mem.Allocator,
     xml: []const u8,
     slug: []const u8,
@@ -580,7 +583,7 @@ pub fn parseChapterListFromRss(
 
     if (verbose) {
         var err_buf: [256]u8 = undefined;
-        var efw = std.fs.File.stderr().writer(&err_buf);
+        var efw = std.Io.File.stderr().writer(io, &err_buf);
         efw.interface.print("[parseChapterListFromRss] Searching for pattern: {s}\n", .{prefix}) catch {};
         efw.interface.flush() catch {};
     }
@@ -654,7 +657,7 @@ pub fn parseChapterListFromRss(
 
     if (verbose) {
         var err_buf: [256]u8 = undefined;
-        var efw = std.fs.File.stderr().writer(&err_buf);
+        var efw = std.Io.File.stderr().writer(io, &err_buf);
         efw.interface.print("[parseChapterListFromRss] Total links examined: {d}, chapters found: {d}\n", .{ link_count, chapters.items.len }) catch {};
         efw.interface.flush() catch {};
     }
@@ -930,22 +933,22 @@ pub fn buildPageUrl(allocator: std.mem.Allocator, chapter_url: []const u8, page:
 }
 
 /// Main entry point: download all (or filtered) chapters of a fanfox.net manga.
-pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
+pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     const url = opts.url orelse return 1;
 
     const slug = extractSlug(url) orelse {
-        printErr("Could not extract manga slug from URL: {s}", .{url});
+        printErr(io, "Could not extract manga slug from URL: {s}", .{url});
         return 1;
     };
 
     // Validate slug to prevent path traversal attacks
     if (!isValidSlug(slug)) {
-        printErr("Invalid manga slug in URL: {s}", .{slug});
+        printErr(io, "Invalid manga slug in URL: {s}", .{slug});
         return 1;
     }
 
     var buf: [4096]u8 = undefined;
-    var fw = std.fs.File.stdout().writer(&buf);
+    var fw = std.Io.File.stdout().writer(io, &buf);
     const w = &fw.interface;
 
     try w.print("MangaFox downloader\n", .{});
@@ -961,7 +964,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     try w.print("  Output: {s}/{s}/\n\n", .{ opts.output_dir, slug });
     try w.flush();
 
-    var client = std.http.Client{ .allocator = allocator };
+    var client = std.http.Client{ .allocator = allocator, .io = io };
     defer client.deinit();
 
     const fetch_opts = http_mod.FetchOptions{
@@ -983,7 +986,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         var rss_resp = rss_resp_val;
         defer rss_resp.deinit();
         if (rss_resp.isSuccess()) {
-            rss_chapters = parseChapterListFromRss(allocator, rss_resp.body, slug, opts.verbose) catch &.{};
+            rss_chapters = parseChapterListFromRss(io, allocator, rss_resp.body, slug, opts.verbose) catch &.{};
         }
     } else |_| {}
 
@@ -1000,18 +1003,18 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         }
 
         var index_resp = http_mod.fetch(&client, allocator, url, fetch_opts) catch |err| {
-            printErr("Failed to fetch manga page: {s}", .{@errorName(err)});
+            printErr(io, "Failed to fetch manga page: {s}", .{@errorName(err)});
             return 1;
         };
         index_resp_opt = index_resp;
 
         if (!index_resp.isSuccess()) {
-            printErr("Manga page returned HTTP {d}", .{index_resp.status});
+            printErr(io, "Manga page returned HTTP {d}", .{index_resp.status});
             return 1;
         }
 
-        html_chapters = parseChapterList(allocator, index_resp.body, slug, url, opts.verbose) catch |err| {
-            printErr("Failed to parse chapter list: {s}", .{@errorName(err)});
+        html_chapters = parseChapterList(io, allocator, index_resp.body, slug, url, opts.verbose) catch |err| {
+            printErr(io, "Failed to parse chapter list: {s}", .{@errorName(err)});
             return 1;
         };
     } else if (opts.verbose) {
@@ -1058,9 +1061,9 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
                 if (jb) |json_buf| {
                     defer allocator.free(json_buf);
 
-                    const cwd = std.fs.cwd();
+                    const cwd = std.Io.Dir.cwd();
                     const meta_dir = std.fs.path.dirname(path) orelse opts.output_dir;
-                    cwd.makePath(meta_dir) catch |err| {
+                    cwd.createDirPath(io, meta_dir) catch |err| {
                         if (err != error.PathAlreadyExists) {
                             try w.print("Warning: could not create metadata directory {s}: {s}\n", .{ meta_dir, @errorName(err) });
                         }
@@ -1074,26 +1077,26 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
                     if (temp_path) |t_path| {
                         defer allocator.free(t_path);
 
-                        const f_opt = cwd.createFile(t_path, .{ .truncate = true }) catch |err| blk: {
+                        const f_opt = cwd.createFile(io, t_path, .{ .truncate = true }) catch |err| blk: {
                             try w.print("Warning: could not create temporary metadata file {s}: {s}\n", .{ t_path, @errorName(err) });
                             break :blk null;
                         };
 
                         if (f_opt) |file| {
                             var write_success = true;
-                            file.writeAll(json_buf) catch |err| {
+                            file.writeStreamingAll(io, json_buf) catch |err| {
                                 try w.print("Warning: failed to write temporary metadata file {s}: {s}\n", .{ t_path, @errorName(err) });
                                 write_success = false;
                             };
-                            file.close();
+                            file.close(io);
 
                             if (write_success) {
-                                cwd.rename(t_path, path) catch |err| {
+                                cwd.rename(t_path, cwd, path, io) catch |err| {
                                     try w.print("Warning: failed to move temporary metadata file to {s}: {s}\n", .{ path, @errorName(err) });
                                 };
                             } else {
                                 // Best-effort cleanup of partial temp file
-                                cwd.deleteFile(t_path) catch {};
+                                cwd.deleteFile(io, t_path) catch {};
                             }
                         }
                     }
@@ -1161,14 +1164,14 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
 
         // Fetch page 1 to determine total pages
         var page1_resp = http_mod.fetch(&client, allocator, chapter.url, fetch_opts) catch |err| {
-            printErr("Failed to fetch chapter {s}: {s}", .{ chapter.number, @errorName(err) });
+            printErr(io, "Failed to fetch chapter {s}: {s}", .{ chapter.number, @errorName(err) });
             total_failed += 1;
             continue;
         };
         defer page1_resp.deinit();
 
         if (!page1_resp.isSuccess()) {
-            printErr("Chapter {s} returned HTTP {d}", .{ chapter.number, page1_resp.status });
+            printErr(io, "Chapter {s} returned HTTP {d}", .{ chapter.number, page1_resp.status });
             total_failed += 1;
             continue;
         }
@@ -1179,7 +1182,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
 
         // Extract the chapter ID needed to call the chapterfun.ashx image API
         const chapter_id = extractChapterId(page1_resp.body) orelse {
-            printErr("Chapter {s}: chapterid not found in page HTML", .{chapter.number});
+            printErr(io, "Chapter {s}: chapterid not found in page HTML", .{chapter.number});
             total_failed += 1;
             continue;
         };
@@ -1192,16 +1195,16 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
             chapter.number,
         }) catch continue;
 
-        const cwd = std.fs.cwd();
-        cwd.makePath(chapter_dir) catch |err| switch (err) {
+        const cwd = std.Io.Dir.cwd();
+        cwd.createDirPath(io, chapter_dir) catch |err| switch (err) {
             error.PathAlreadyExists => {},
             else => {
-                printErr("Cannot create directory {s}: {s}", .{ chapter_dir, @errorName(err) });
+                printErr(io, "Cannot create directory {s}: {s}", .{ chapter_dir, @errorName(err) });
                 continue;
             },
         };
-        var out_dir = cwd.openDir(chapter_dir, .{}) catch continue;
-        defer out_dir.close();
+        var out_dir = cwd.openDir(io, chapter_dir, .{}) catch continue;
+        defer out_dir.close(io);
 
         var page: usize = 1;
         var saved_count: usize = 0;
@@ -1218,7 +1221,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
                 if (probe_mode and page > 1) break;
                 if (opts.verbose) {
                     var pb: [256]u8 = undefined;
-                    var pfw = std.fs.File.stderr().writer(&pb);
+                    var pfw = std.Io.File.stderr().writer(io, &pb);
                     pfw.interface.print("  [ch {s}] page {d}: no image URL from API\n", .{ chapter.number, page }) catch {};
                     pfw.interface.flush() catch {};
                 }
@@ -1254,7 +1257,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
             var img_resp = http_mod.fetch(&client, allocator, img_url, img_fetch_opts) catch |err| {
                 if (opts.verbose) {
                     var pb: [512]u8 = undefined;
-                    var pfw = std.fs.File.stderr().writer(&pb);
+                    var pfw = std.Io.File.stderr().writer(io, &pb);
                     pfw.interface.print("  [ch {s}] page {d}: download failed ({s})\n", .{ chapter.number, page, @errorName(err) }) catch {};
                     pfw.interface.flush() catch {};
                 }
@@ -1272,8 +1275,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
             var name_buf: [32]u8 = undefined;
             const filename = std.fmt.bufPrint(&name_buf, "{d:0>3}{s}", .{ page, ext }) catch continue;
 
-            out_dir.writeFile(.{ .sub_path = filename, .data = img_resp.body }) catch |err| {
-                printErr("Failed to save {s}/{s}: {s}", .{ chapter_dir, filename, @errorName(err) });
+            out_dir.writeFile(io, .{ .sub_path = filename, .data = img_resp.body }) catch |err| {
+                printErr(io, "Failed to save {s}/{s}: {s}", .{ chapter_dir, filename, @errorName(err) });
                 total_failed += 1;
                 continue;
             };
@@ -1288,7 +1291,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
 
             // Delay between page requests
             if (opts.delay_ms > 0) {
-                std.Thread.sleep(@as(u64, opts.delay_ms) * std.time.ns_per_ms);
+                try io.sleep(.fromMilliseconds(opts.delay_ms), .awake);
             }
         }
 
@@ -1297,13 +1300,14 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
 
         // Delay between chapters
         if (opts.delay_ms > 0) {
-            std.Thread.sleep(@as(u64, opts.delay_ms) * std.time.ns_per_ms);
+            try io.sleep(.fromMilliseconds(opts.delay_ms), .awake);
         }
     }
 
     try w.print("\nDone. Downloaded: {d}  Failed: {d}\n", .{ total_downloaded, total_failed });
 
     const browser_summary = try image_browser_mod.generate(
+        io,
         allocator,
         opts.output_dir,
     );
@@ -1403,9 +1407,9 @@ fn extractAttrValue(tag: []const u8, attr: []const u8) ?[]const u8 {
     return null;
 }
 
-fn printErr(comptime fmt: []const u8, args: anytype) void {
+fn printErr(io: std.Io, comptime fmt: []const u8, args: anytype) void {
     var buf: [1024]u8 = undefined;
-    var fw = std.fs.File.stderr().writer(&buf);
+    var fw = std.Io.File.stderr().writer(io, &buf);
     fw.interface.print("error: " ++ fmt ++ "\n", args) catch {};
     fw.interface.flush() catch {};
 }
@@ -1634,7 +1638,7 @@ test "parseChapterList" {
         \\  <li><a href="/manga/naruto/c5.5/1.html">Chapter 5.5</a></li>
         \\</ul>
     ;
-    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net", false);
+    const chapters = try parseChapterList(std.testing.io, std.testing.allocator, html, "naruto", "https://fanfox.net", false);
     defer {
         for (chapters) |ch| {
             std.testing.allocator.free(ch.number);
@@ -1660,7 +1664,7 @@ test "parseChapterListFromRss basic" {
         \\<item><title>Naruto Ch.5.5</title><link>https://fanfox.net/manga/naruto/c5.5/1.html</link></item>
         \\</channel></rss>
     ;
-    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    const chapters = try parseChapterListFromRss(std.testing.io, std.testing.allocator, xml, "naruto", false);
     defer {
         for (chapters) |ch| {
             std.testing.allocator.free(ch.number);
@@ -1685,7 +1689,7 @@ test "parseChapterListFromRss filters non-chapter links" {
         \\<item><title>Seventh Ch.002</title><link>https://fanfox.net/manga/seventh/c002/1.html</link></item>
         \\</channel></rss>
     ;
-    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "seventh", false);
+    const chapters = try parseChapterListFromRss(std.testing.io, std.testing.allocator, xml, "seventh", false);
     defer {
         for (chapters) |ch| {
             std.testing.allocator.free(ch.number);
@@ -1706,7 +1710,7 @@ test "parseChapterListFromRss deduplicates" {
         \\<item><link>https://fanfox.net/manga/naruto/c101/1.html</link></item>
         \\</channel></rss>
     ;
-    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    const chapters = try parseChapterListFromRss(std.testing.io, std.testing.allocator, xml, "naruto", false);
     defer {
         for (chapters) |ch| {
             std.testing.allocator.free(ch.number);
@@ -1719,7 +1723,7 @@ test "parseChapterListFromRss deduplicates" {
 
 test "parseChapterListFromRss empty feed" {
     const xml = "<?xml version=\"1.0\"?><rss><channel></channel></rss>";
-    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    const chapters = try parseChapterListFromRss(std.testing.io, std.testing.allocator, xml, "naruto", false);
     defer std.testing.allocator.free(chapters);
     try std.testing.expect(chapters.len == 0);
 }
@@ -1731,7 +1735,7 @@ test "parseChapterListFromRss wrong slug filtered" {
         \\<item><link>https://fanfox.net/manga/bleach/c700/1.html</link></item>
         \\</channel></rss>
     ;
-    const chapters = try parseChapterListFromRss(std.testing.allocator, xml, "naruto", false);
+    const chapters = try parseChapterListFromRss(std.testing.io, std.testing.allocator, xml, "naruto", false);
     defer std.testing.allocator.free(chapters);
     try std.testing.expect(chapters.len == 0);
 }
@@ -1833,7 +1837,7 @@ test "parseChapterList without trailing slash" {
         \\  <li><a href="/manga/naruto/c10.5.html">Chapter 10.5</a></li>
         \\</ul>
     ;
-    const chapters = try parseChapterList(std.testing.allocator, html, "naruto", "https://fanfox.net", false);
+    const chapters = try parseChapterList(std.testing.io, std.testing.allocator, html, "naruto", "https://fanfox.net", false);
     defer {
         for (chapters) |ch| {
             std.testing.allocator.free(ch.number);

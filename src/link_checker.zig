@@ -7,13 +7,13 @@ const summary_mod = @import("summary.zig");
 pub const CheckSummary = summary_mod.CheckSummary;
 
 /// Run the link checker: crawl the site and report broken links.
-pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
+pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     const url = opts.url orelse return 1;
 
     const silent = opts.report != null;
 
     var buf: [4096]u8 = undefined;
-    var fw = std.fs.File.stdout().writer(&buf);
+    var fw = std.Io.File.stdout().writer(io, &buf);
     const w = &fw.interface;
 
     if (!silent) {
@@ -25,9 +25,9 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
         try w.flush();
     }
 
-    const crawl_start = std.time.milliTimestamp();
+    const crawl_start = std.Io.Timestamp.now(io, .awake).toMilliseconds();
 
-    var c = crawler_mod.Crawler.init(allocator, url, .{
+    var c = crawler_mod.Crawler.init(io, allocator, url, .{
         .max_depth = opts.depth,
         .timeout_ms = opts.timeout_ms,
         .delay_ms = opts.delay_ms,
@@ -39,7 +39,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
 
     try c.crawl();
 
-    const crawl_elapsed_ms: u64 = @intCast(std.time.milliTimestamp() - crawl_start);
+    const crawl_elapsed_ms: u64 = @intCast(std.Io.Timestamp.now(io, .awake).toMilliseconds() - crawl_start);
 
     // Collect results and build summary
     const results = c.results.items;
@@ -126,6 +126,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     var report_write_failed = false;
     if (opts.report) |report_path| {
         report_mod.write(
+            io,
             allocator,
             report_path,
             opts.report_format,
@@ -135,7 +136,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
             opts.include_positives,
         ) catch |err| {
             var ebuf: [256]u8 = undefined;
-            var efw = std.fs.File.stderr().writer(&ebuf);
+            var efw = std.Io.File.stderr().writer(io, &ebuf);
             efw.interface.print("error: failed to write report to '{s}': {}\n", .{ report_path, err }) catch {};
             efw.interface.flush() catch {};
             report_write_failed = true;

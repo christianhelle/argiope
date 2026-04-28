@@ -36,28 +36,28 @@ const QueueEntry = struct {
 const ParallelWorkerCtx = struct {
     crawler: *Crawler,
     alloc: std.mem.Allocator,
-    mutex: *std.Thread.Mutex,
+    mutex: *std.Io.Mutex,
     active: *std.atomic.Value(u32),
 };
 
 fn parallelWorker(ctx: ParallelWorkerCtx) void {
-    var client = std.http.Client{ .allocator = ctx.alloc };
+    var client = std.http.Client{ .allocator = ctx.alloc, .io = ctx.crawler.io };
     defer client.deinit();
 
     while (true) {
-        ctx.mutex.lock();
+        ctx.mutex.lockUncancelable(ctx.crawler.io);
         if (ctx.crawler.queue.items.len == 0) {
             if (ctx.active.load(.monotonic) == 0) {
-                ctx.mutex.unlock();
+                ctx.mutex.unlock(ctx.crawler.io);
                 return;
             }
-            ctx.mutex.unlock();
-            std.Thread.sleep(1 * std.time.ns_per_ms);
+            ctx.mutex.unlock(ctx.crawler.io);
+            ctx.crawler.io.sleep(.fromMilliseconds(1), .awake) catch {};
             continue;
         }
         const entry = ctx.crawler.queue.swapRemove(0);
         _ = ctx.active.fetchAdd(1, .monotonic);
-        ctx.mutex.unlock();
+        ctx.mutex.unlock(ctx.crawler.io);
         defer {
             ctx.alloc.free(entry.url);
             _ = ctx.active.fetchSub(1, .release);
@@ -65,27 +65,27 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
 
         const normalized = url_mod.normalize(ctx.alloc, entry.url) catch continue;
 
-        ctx.mutex.lock();
+        ctx.mutex.lockUncancelable(ctx.crawler.io);
         if (ctx.crawler.visited.get(normalized) != null) {
-            ctx.mutex.unlock();
+            ctx.mutex.unlock(ctx.crawler.io);
             ctx.alloc.free(normalized);
             continue;
         }
         ctx.crawler.visited.put(ctx.alloc, normalized, {}) catch {
-            ctx.mutex.unlock();
+            ctx.mutex.unlock(ctx.crawler.io);
             ctx.alloc.free(normalized);
             continue;
         };
-        ctx.mutex.unlock();
+        ctx.mutex.unlock(ctx.crawler.io);
 
         const is_internal = ctx.crawler.isInternal(normalized);
 
         if (ctx.crawler.options.verbose) {
-            ctx.mutex.lock();
+            ctx.mutex.lockUncancelable(ctx.crawler.io);
             const q_len = ctx.crawler.queue.items.len;
-            ctx.mutex.unlock();
+            ctx.mutex.unlock(ctx.crawler.io);
             var pbuf: [2048]u8 = undefined;
-            var fw = std.fs.File.stderr().writer(&pbuf);
+            var fw = std.Io.File.stderr().writer(ctx.crawler.io, &pbuf);
             fw.interface.print("[{d} queued] Checking: {s}\n", .{ q_len, normalized }) catch {};
             fw.interface.flush() catch {};
         }
@@ -96,12 +96,12 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
             .max_body_size = ctx.crawler.options.max_body_size,
         };
 
-        const t0 = std.time.milliTimestamp();
+        const t0 = std.Io.Timestamp.now(ctx.crawler.io, .awake).toMilliseconds();
         var response = http_mod.fetch(&client, ctx.alloc, normalized, fetch_opts) catch |err| {
-            const elapsed: u64 = @intCast(std.time.milliTimestamp() - t0);
+            const elapsed: u64 = @intCast(std.Io.Timestamp.now(ctx.crawler.io, .awake).toMilliseconds() - t0);
             const url_copy = ctx.alloc.dupe(u8, normalized) catch &[_]u8{};
             const err_copy = ctx.alloc.dupe(u8, @errorName(err)) catch null;
-            ctx.mutex.lock();
+            ctx.mutex.lockUncancelable(ctx.crawler.io);
             ctx.crawler.results.append(ctx.alloc, CrawlResult{
                 .url = @constCast(url_copy),
                 .status = 0,
@@ -112,11 +112,11 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
             }) catch {};
             ctx.crawler.checked_count += 1;
             if (!ctx.crawler.options.verbose and !ctx.crawler.options.silent) ctx.crawler.printProgress(ctx.crawler.queue.items.len);
-            ctx.mutex.unlock();
+            ctx.mutex.unlock(ctx.crawler.io);
             continue;
         };
         defer response.deinit();
-        const elapsed_ms: u64 = @intCast(std.time.milliTimestamp() - t0);
+        const elapsed_ms: u64 = @intCast(std.Io.Timestamp.now(ctx.crawler.io, .awake).toMilliseconds() - t0);
 
         var links_found: usize = 0;
         var new_urls: std.ArrayListUnmanaged(QueueEntry) = .empty;
@@ -151,7 +151,7 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
         }
 
         const url_copy = ctx.alloc.dupe(u8, normalized) catch &[_]u8{};
-        ctx.mutex.lock();
+        ctx.mutex.lockUncancelable(ctx.crawler.io);
         ctx.crawler.results.append(ctx.alloc, CrawlResult{
             .url = @constCast(url_copy),
             .status = response.status,
@@ -172,11 +172,12 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
             }
         }
         new_urls.items.len = 0; // Ownership transferred or freed above
-        ctx.mutex.unlock();
+        ctx.mutex.unlock(ctx.crawler.io);
     }
 }
 
 pub const Crawler = struct {
+    io: std.Io,
     allocator: std.mem.Allocator,
     base_url: []const u8,
     options: CrawlOptions,
@@ -187,8 +188,9 @@ pub const Crawler = struct {
     client: std.http.Client,
     checked_count: usize,
 
-    pub fn init(allocator: std.mem.Allocator, base_url: []const u8, options: CrawlOptions) Crawler {
+    pub fn init(io: std.Io, allocator: std.mem.Allocator, base_url: []const u8, options: CrawlOptions) Crawler {
         return Crawler{
+            .io = io,
             .allocator = allocator,
             .base_url = base_url,
             .options = options,
@@ -196,7 +198,7 @@ pub const Crawler = struct {
             .results = .empty,
             .queue = .empty,
             .base_parsed = url_mod.Url.parse(base_url) catch null,
-            .client = .{ .allocator = allocator },
+            .client = .{ .allocator = allocator, .io = io },
             .checked_count = 0,
         };
     }
@@ -205,7 +207,7 @@ pub const Crawler = struct {
         const spinners = "-\\|/";
         const sp = spinners[self.checked_count % 4];
         var pbuf: [256]u8 = undefined;
-        var fw = std.fs.File.stderr().writer(&pbuf);
+        var fw = std.Io.File.stderr().writer(self.io, &pbuf);
         fw.interface.print("\r  {c} {d} checked | {d} queued          ", .{ sp, self.checked_count, queued }) catch {};
         fw.interface.flush() catch {};
     }
@@ -213,7 +215,7 @@ pub const Crawler = struct {
     fn clearProgress(self: *Crawler) void {
         if (self.checked_count == 0) return;
         var pbuf: [128]u8 = undefined;
-        var fw = std.fs.File.stderr().writer(&pbuf);
+        var fw = std.Io.File.stderr().writer(self.io, &pbuf);
         fw.interface.print("\r{s}\r", .{" " ** 60}) catch {};
         fw.interface.flush() catch {};
     }
@@ -270,7 +272,7 @@ pub const Crawler = struct {
             // Verbose progress reporting
             if (self.options.verbose) {
                 var pbuf: [2048]u8 = undefined;
-                var fw = std.fs.File.stderr().writer(&pbuf);
+                var fw = std.Io.File.stderr().writer(self.io, &pbuf);
                 fw.interface.print("[{d} queued] Checking: {s}\n", .{ self.queue.items.len, normalized }) catch {};
                 fw.interface.flush() catch {};
             }
@@ -284,7 +286,7 @@ pub const Crawler = struct {
 
             // Rate limiting
             if (self.options.delay_ms > 0) {
-                std.Thread.sleep(@as(u64, self.options.delay_ms) * std.time.ns_per_ms);
+                try self.io.sleep(.fromMilliseconds(self.options.delay_ms), .awake);
             }
         }
         if (!self.options.verbose and !self.options.silent) self.clearProgress();
@@ -292,8 +294,7 @@ pub const Crawler = struct {
 
     /// Parallel crawl: processes queue entries concurrently using a thread pool.
     fn crawlParallel(self: *Crawler) !void {
-        var ts_alloc = std.heap.ThreadSafeAllocator{ .child_allocator = self.allocator };
-        const alloc = ts_alloc.allocator();
+        const alloc = self.allocator;
 
         const seed = try alloc.dupe(u8, self.base_url);
         try self.queue.append(alloc, .{ .url = seed, .depth = 0 });
@@ -301,7 +302,7 @@ pub const Crawler = struct {
         const cpu_count = std.Thread.getCpuCount() catch 4;
         const num_threads = @min(cpu_count, 16);
 
-        var mutex = std.Thread.Mutex{};
+        var mutex = std.Io.Mutex.init;
         var active = std.atomic.Value(u32).init(0);
 
         const ctx = ParallelWorkerCtx{
@@ -328,9 +329,9 @@ pub const Crawler = struct {
             .max_body_size = self.options.max_body_size,
         };
 
-        const t0 = std.time.milliTimestamp();
+        const t0 = std.Io.Timestamp.now(self.io, .awake).toMilliseconds();
         var response = http_mod.fetch(&self.client, self.allocator, url_str, fetch_opts) catch |err| {
-            const elapsed: u64 = @intCast(std.time.milliTimestamp() - t0);
+            const elapsed: u64 = @intCast(std.Io.Timestamp.now(self.io, .awake).toMilliseconds() - t0);
             const url_copy = self.allocator.dupe(u8, url_str) catch return CrawlResult{
                 .url = &.{},
                 .status = 0,
@@ -349,7 +350,7 @@ pub const Crawler = struct {
             };
         };
         defer response.deinit();
-        const elapsed_ms: u64 = @intCast(std.time.milliTimestamp() - t0);
+        const elapsed_ms: u64 = @intCast(std.Io.Timestamp.now(self.io, .awake).toMilliseconds() - t0);
 
         var links_found: usize = 0;
 
@@ -465,7 +466,7 @@ pub const Crawler = struct {
 // ── Tests ──────────────────────────────────────────────────────────────
 
 test "Crawler init and deinit" {
-    var crawler = Crawler.init(std.testing.allocator, "https://example.com", .{});
+    var crawler = Crawler.init(std.testing.io, std.testing.allocator, "https://example.com", .{});
     defer crawler.deinit();
 
     try std.testing.expect(crawler.visited.count() == 0);
@@ -474,7 +475,7 @@ test "Crawler init and deinit" {
 }
 
 test "Crawler isInternal" {
-    var crawler = Crawler.init(std.testing.allocator, "https://example.com", .{});
+    var crawler = Crawler.init(std.testing.io, std.testing.allocator, "https://example.com", .{});
     defer crawler.deinit();
 
     try std.testing.expect(crawler.isInternal("https://example.com/page"));
@@ -505,7 +506,7 @@ test "CrawlResult deinit" {
 }
 
 test "Crawler getImageUrls" {
-    var crawler = Crawler.init(std.testing.allocator, "https://example.com", .{});
+    var crawler = Crawler.init(std.testing.io, std.testing.allocator, "https://example.com", .{});
     defer crawler.deinit();
 
     const html =

@@ -42,14 +42,13 @@ pub const Url = struct {
 
     /// Return the origin string: "scheme://host[:port]"
     pub fn origin(self: Url, buf: []u8) ![]const u8 {
-        var fbs = std.io.fixedBufferStream(buf);
-        const writer = fbs.writer();
+        var writer = std.Io.Writer.fixed(buf);
         if (self.port) |p| {
             try writer.print("{s}://{s}:{d}", .{ self.scheme, self.host, p });
         } else {
             try writer.print("{s}://{s}", .{ self.scheme, self.host });
         }
-        return fbs.getWritten();
+        return writer.buffered();
     }
 
     /// Check if two URLs share the same origin (scheme + host + port).
@@ -85,9 +84,9 @@ pub fn resolve(allocator: std.mem.Allocator, base: []const u8, href: []const u8)
 
     if (std.mem.startsWith(u8, trimmed, "//")) {
         // Protocol-relative
-        var fbs = std.io.fixedBufferStream(&buf);
-        try fbs.writer().print("{s}:{s}", .{ base_url.scheme, trimmed });
-        return try allocator.dupe(u8, fbs.getWritten());
+        var writer = std.Io.Writer.fixed(&buf);
+        try writer.print("{s}:{s}", .{ base_url.scheme, trimmed });
+        return try allocator.dupe(u8, writer.buffered());
     }
 
     const origin_str = try base_url.origin(&buf);
@@ -110,9 +109,9 @@ pub fn resolve(allocator: std.mem.Allocator, base: []const u8, href: []const u8)
     @memcpy(origin_copy[0..origin_str.len], origin_str);
     const origin_safe = origin_copy[0..origin_str.len];
 
-    var fbs2 = std.io.fixedBufferStream(&buf);
-    try fbs2.writer().print("{s}{s}{s}", .{ origin_safe, base_dir, trimmed });
-    return try allocator.dupe(u8, fbs2.getWritten());
+    var writer = std.Io.Writer.fixed(&buf);
+    try writer.print("{s}{s}{s}", .{ origin_safe, base_dir, trimmed });
+    return try allocator.dupe(u8, writer.buffered());
 }
 
 /// Normalize a URL by removing the fragment and trailing slash from path.
