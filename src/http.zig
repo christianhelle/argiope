@@ -139,7 +139,7 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
         // Read response body up to max_body_size to prevent OOM on large responses
         var transfer_buf: [8192]u8 = undefined;
         const reader = response.reader(&transfer_buf);
-        const body = reader.allocRemaining(allocator, std.io.Limit.limited(options.max_body_size)) catch
+        const body = reader.allocRemaining(allocator, std.Io.Limit.limited(options.max_body_size)) catch
             (allocator.dupe(u8, "") catch return error.ConnectionFailed);
 
         return Response{
@@ -153,10 +153,10 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
 
 /// Check if a URL is reachable by sending a GET request.
 /// Returns the HTTP status code, or error if connection fails.
-pub fn checkStatus(allocator: std.mem.Allocator, url_str: []const u8, options: FetchOptions) !u16 {
+pub fn checkStatus(io: std.Io, allocator: std.mem.Allocator, url_str: []const u8, options: FetchOptions) !u16 {
     _ = options;
 
-    var client: std.http.Client = .{ .allocator = allocator };
+    var client: std.http.Client = .{ .allocator = allocator, .io = io };
     defer client.deinit();
 
     const result = client.fetch(.{
@@ -260,7 +260,7 @@ test "Response.deinit frees body and content_type" {
         .content_type = try std.testing.allocator.dupe(u8, "text/html"),
     };
     resp.deinit();
-    // No leak = test passes (GeneralPurposeAllocator would catch leaks)
+    // No leak = test passes (DebugAllocator-backed test allocator catches leaks)
 }
 
 test "isHtmlContent" {

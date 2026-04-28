@@ -24,6 +24,7 @@ fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
 }
 
 pub fn write(
+    io: std.Io,
     allocator: std.mem.Allocator,
     path: []const u8,
     format: cli_mod.ReportFormat,
@@ -32,11 +33,11 @@ pub fn write(
     summary: summary_mod.CheckSummary,
     include_positives: bool,
 ) !void {
-    const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
-    defer file.close();
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = true });
+    defer file.close(io);
 
     var buf: [65536]u8 = undefined;
-    var fw = file.writer(&buf);
+    var fw = file.writer(io, &buf);
     const w = &fw.interface;
 
     switch (format) {
@@ -371,7 +372,7 @@ test "write text report to temp file" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buf: [4096]u8 = undefined;
-    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const dir_path = path_buf[0..try tmp.dir.realPath(std.testing.io, &path_buf)];
     const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.tmp" });
     defer allocator.free(tmp_path);
 
@@ -391,9 +392,9 @@ test "write text report to temp file" {
         .max_time_ms = 50,
     };
 
-    try write(allocator, tmp_path, .text, "https://example.com", &results, summary, false);
+    try write(std.testing.io, allocator, tmp_path, .text, "https://example.com", &results, summary, false);
 
-    const content = try tmp.dir.readFileAlloc(allocator, "report.tmp", 65536);
+    const content = try tmp.dir.readFileAlloc(std.testing.io, "report.tmp", allocator, .limited(65536));
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "BROKEN LINKS") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/broken") != null);
@@ -405,7 +406,7 @@ test "write markdown report to temp file" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buf: [4096]u8 = undefined;
-    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const dir_path = path_buf[0..try tmp.dir.realPath(std.testing.io, &path_buf)];
     const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.md" });
     defer allocator.free(tmp_path);
 
@@ -424,9 +425,9 @@ test "write markdown report to temp file" {
         .max_time_ms = 20,
     };
 
-    try write(allocator, tmp_path, .markdown, "https://example.com", &results, summary, false);
+    try write(std.testing.io, allocator, tmp_path, .markdown, "https://example.com", &results, summary, false);
 
-    const content = try tmp.dir.readFileAlloc(allocator, "report.md", 65536);
+    const content = try tmp.dir.readFileAlloc(std.testing.io, "report.md", allocator, .limited(65536));
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "# Link Check Report") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "[404]") != null);
@@ -437,7 +438,7 @@ test "write html report to temp file" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buf: [4096]u8 = undefined;
-    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const dir_path = path_buf[0..try tmp.dir.realPath(std.testing.io, &path_buf)];
     const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.html" });
     defer allocator.free(tmp_path);
 
@@ -456,9 +457,9 @@ test "write html report to temp file" {
         .max_time_ms = 10,
     };
 
-    try write(allocator, tmp_path, .html, "https://example.com", &results, summary, true);
+    try write(std.testing.io, allocator, tmp_path, .html, "https://example.com", &results, summary, true);
 
-    const content = try tmp.dir.readFileAlloc(allocator, "report.html", 65536);
+    const content = try tmp.dir.readFileAlloc(std.testing.io, "report.html", allocator, .limited(65536));
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "<!DOCTYPE html>") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/ok") != null);
@@ -473,7 +474,7 @@ test "include-positives includes ok links in text report" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buf: [4096]u8 = undefined;
-    const dir_path = try tmp.dir.realpath(".", &path_buf);
+    const dir_path = path_buf[0..try tmp.dir.realPath(std.testing.io, &path_buf)];
     const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report_pos.tmp" });
     defer allocator.free(tmp_path);
 
@@ -492,9 +493,9 @@ test "include-positives includes ok links in text report" {
         .max_time_ms = 10,
     };
 
-    try write(allocator, tmp_path, .text, "https://example.com", &results, summary, true);
+    try write(std.testing.io, allocator, tmp_path, .text, "https://example.com", &results, summary, true);
 
-    const content = try tmp.dir.readFileAlloc(allocator, "report_pos.tmp", 65536);
+    const content = try tmp.dir.readFileAlloc(std.testing.io, "report_pos.tmp", allocator, .limited(65536));
     defer allocator.free(content);
     try std.testing.expect(std.mem.indexOf(u8, content, "OK LINKS") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "https://example.com/ok") != null);

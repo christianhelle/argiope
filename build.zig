@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     if (target.result.os.tag == .windows) {
-        exe.addWin32ResourceFile(.{ .file = b.path("images/icon.rc") });
+        exe.root_module.addWin32ResourceFile(.{ .file = b.path("images/icon.rc") });
     }
     b.installArtifact(exe);
 

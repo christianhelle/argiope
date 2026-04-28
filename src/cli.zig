@@ -61,7 +61,7 @@ pub const ParseError = error{
 
 /// Parse command-line arguments into Options.
 /// The returned Options borrows slices from `args`.
-pub fn parseArgs(args: []const []const u8) ParseError!Options {
+pub fn parseArgs(args: anytype) ParseError!Options {
     if (args.len < 2) return Options.defaults;
 
     var opts = Options.defaults;
@@ -162,9 +162,9 @@ pub fn parseArgs(args: []const []const u8) ParseError!Options {
     return opts;
 }
 
-pub fn printHelp() !void {
+pub fn printHelp(io: std.Io) !void {
     var buf: [4096]u8 = undefined;
-    var fw = std.fs.File.stdout().writer(&buf);
+    var fw = std.Io.File.stdout().writer(io, &buf);
     try fw.interface.print(
         \\argiope {s} — a web crawler for broken-link detection and image downloading
         \\
@@ -201,16 +201,16 @@ pub fn printHelp() !void {
     try fw.interface.flush();
 }
 
-pub fn printVersion() !void {
+pub fn printVersion(io: std.Io) !void {
     var buf: [256]u8 = undefined;
-    var fw = std.fs.File.stdout().writer(&buf);
+    var fw = std.Io.File.stdout().writer(io, &buf);
     try fw.interface.print("argiope {s}\n", .{version});
     try fw.interface.flush();
 }
 
-pub fn printError(msg: []const u8) void {
+pub fn printError(io: std.Io, msg: []const u8) void {
     var buf: [1024]u8 = undefined;
-    var fw = std.fs.File.stderr().writer(&buf);
+    var fw = std.Io.File.stderr().writer(io, &buf);
     fw.interface.print("error: {s}\n", .{msg}) catch {};
     fw.interface.flush() catch {};
 }

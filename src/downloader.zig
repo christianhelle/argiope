@@ -48,22 +48,22 @@ fn getPathFromUrl(url_str: []const u8) []const u8 {
 }
 
 /// Save binary data to a file within the given directory.
-fn saveFile(dir: std.fs.Dir, filename: []const u8, data: []const u8) !void {
-    dir.writeFile(.{ .sub_path = filename, .data = data }) catch |err| {
+fn saveFile(io: std.Io, dir: std.Io.Dir, filename: []const u8, data: []const u8) !void {
+    dir.writeFile(io, .{ .sub_path = filename, .data = data }) catch |err| {
         return err;
     };
 }
 
 /// Create nested directory structure, returning the deepest Dir handle.
-fn ensureDir(allocator: std.mem.Allocator, base_path: []const u8) !std.fs.Dir {
+fn ensureDir(io: std.Io, allocator: std.mem.Allocator, base_path: []const u8) !std.Io.Dir {
     // Use cwd-relative path
-    const cwd = std.fs.cwd();
-    cwd.makePath(base_path) catch |err| switch (err) {
+    const cwd = std.Io.Dir.cwd();
+    cwd.createDirPath(io, base_path) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
     _ = allocator;
-    return cwd.openDir(base_path, .{}) catch return error.FileNotFound;
+    return cwd.openDir(io, base_path, .{}) catch return error.FileNotFound;
 }
 
 /// Returns true if `url`'s host is exactly "fanfox.net" or any subdomain of it (case-insensitive).
@@ -85,25 +85,25 @@ pub fn isFanfoxHost(url: []const u8) bool {
 }
 
 /// Run the downloader: crawl the site, find images, and save them.
-pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
+pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     const url = opts.url orelse return 1;
 
     // Delegate to the MangaFox-specific downloader for fanfox.net URLs (by host)
     if (isFanfoxHost(url)) {
-        return mangafox_mod.run(allocator, opts);
+        return mangafox_mod.run(io, allocator, opts);
     }
 
     var buf: [4096]u8 = undefined;
-    var fw = std.fs.File.stdout().writer(&buf);
+    var fw = std.Io.File.stdout().writer(io, &buf);
     const w = &fw.interface;
 
     try w.print("Downloading images from {s}\n", .{url});
     try w.print("Output: {s}, Depth: {d}\n\n", .{ opts.output_dir, opts.depth });
     try w.flush();
 
-    const crawl_start = std.time.milliTimestamp();
+    const crawl_start = std.Io.Timestamp.now(io, .awake).toMilliseconds();
 
-    var c = crawler_mod.Crawler.init(allocator, url, .{
+    var c = crawler_mod.Crawler.init(io, allocator, url, .{
         .max_depth = opts.depth,
         .timeout_ms = opts.timeout_ms,
         .delay_ms = opts.delay_ms,
@@ -113,7 +113,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
 
     try c.crawl();
 
-    const crawl_elapsed_ms: u64 = @intCast(std.time.milliTimestamp() - crawl_start);
+    const crawl_elapsed_ms: u64 = @intCast(std.Io.Timestamp.now(io, .awake).toMilliseconds() - crawl_start);
 
     var result = DownloadResult{
         .total_pages = c.results.items.len,
@@ -164,8 +164,8 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
                 page_num,
             }) catch continue;
 
-            var dir = ensureDir(allocator, page_dir) catch continue;
-            defer dir.close();
+            var dir = ensureDir(io, allocator, page_dir) catch continue;
+            defer dir.close(io);
 
             // Download the image
             var img_response = http_mod.fetch(&c.client, allocator, img_url, fetch_opts) catch {
@@ -186,7 +186,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
                 ext,
             }) catch continue;
 
-            saveFile(dir, filename, img_response.body) catch {
+            saveFile(io, dir, filename, img_response.body) catch {
                 result.failed += 1;
                 continue;
             };
@@ -208,6 +208,7 @@ pub fn run(allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 {
     try w.print("  Total crawl time: {d}ms\n", .{crawl_elapsed_ms});
 
     const browser_summary = try image_browser_mod.generate(
+        io,
         allocator,
         opts.output_dir,
     );
@@ -268,10 +269,10 @@ test "saveFile and read back" {
     defer tmp.cleanup();
 
     const data = "test image data";
-    try saveFile(tmp.dir, "test.jpg", data);
+    try saveFile(std.testing.io, tmp.dir, "test.jpg", data);
 
     // Read it back
-    const content = try tmp.dir.readFileAlloc(std.testing.allocator, "test.jpg", 1024);
+    const content = try tmp.dir.readFileAlloc(std.testing.io, "test.jpg", std.testing.allocator, .limited(1024));
     defer std.testing.allocator.free(content);
     try std.testing.expectEqualStrings("test image data", content);
 }

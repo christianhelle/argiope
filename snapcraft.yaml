@@ -83,9 +83,14 @@ parts:
     plugin: nil
     build-packages:
       - curl
+      - tar
       - xz-utils
     override-build: |
-      snap install zig --classic --beta
+      set -eu
+      ZIG_VERSION=0.16.0
+      curl -fsSLo zig.tar.xz "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/zig"
+      tar -xJf zig.tar.xz --strip-components=1 -C "$SNAPCRAFT_PART_INSTALL/zig"
 
   argiope:
     after: [zig]
@@ -93,6 +98,7 @@ parts:
     source: .
     override-build: |
       export PATH="$SNAPCRAFT_STAGE/zig:$PATH"
+      zig version
       zig build -Doptimize=ReleaseFast
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin
       cp zig-out/bin/argiope $SNAPCRAFT_PART_INSTALL/bin/
