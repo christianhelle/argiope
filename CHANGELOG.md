@@ -5,6 +5,9 @@
 ### Merged Pull Requests
 - Add install script usage to README ([#28](https://github.com/christianhelle/argiope/pull/28)) (@Copilot)
 
+### Features
+- Upgrade to Zig version 0.16 ([#31](https://github.com/christianhelle/argiope/pull/31)) ([@christianhelle](https://github.com/christianhelle/))
+
 
 ## [0.3.5](https://github.com/christianhelle/argiope/releases/tag/0.3.5) (2026-03-14)
 
