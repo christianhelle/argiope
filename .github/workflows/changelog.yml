@@ -27,8 +27,8 @@ jobs:
       - name: Commit changelog
         if: steps.changelog.outputs.changed == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "Christian Helle"
+          git config user.email "christian.helle@outlook.com"
           git add CHANGELOG.md
           git commit -m "Update changelog [skip ci]"
           git push
