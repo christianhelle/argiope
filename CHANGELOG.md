@@ -3,6 +3,7 @@
 ## [Unreleased Changes]
 
 ### Merged Pull Requests
+- Add release install build steps ([#32](https://github.com/christianhelle/argiope/pull/32)) ([@christianhelle](https://github.com/christianhelle/))
 - Add install script usage to README ([#28](https://github.com/christianhelle/argiope/pull/28)) (@Copilot)
 
 ### Features
@@ -48,3 +49,5 @@
 ## [0.1.1](https://github.com/christianhelle/argiope/releases/tag/0.1.1) (2026-03-03)
 
 
+---
+***This changelog was generated with [chlogr](https://github.com/christianhelle/chlogr). Any changes to this file will be overwritten.***
