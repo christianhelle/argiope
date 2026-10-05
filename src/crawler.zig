@@ -216,7 +216,7 @@ pub const Crawler = struct {
         if (self.checked_count == 0) return;
         var pbuf: [128]u8 = undefined;
         var fw = std.Io.File.stderr().writer(self.io, &pbuf);
-        fw.interface.print("\r{s}\r", .{" " ** 60}) catch {};
+        fw.interface.print("\r{s}\r", .{&@as([60]u8, @splat(' '))}) catch {};
         fw.interface.flush() catch {};
     }
 
