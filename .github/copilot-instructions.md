@@ -48,6 +48,7 @@ These are critical project conventions for Zig 0.17:
 - **Enums**: Use `@backingInt(e)` instead of the deprecated `@intFromEnum(e)`.
 - **Repeated arrays**: Array multiplication (`"-" ** 88`) was removed; use `&@as([88]u8, @splat('-'))`.
 - **Run step args**: Use `run_cmd.addPassthruArgs()` instead of `if (b.args) |args| run_cmd.addArgs(args)`.
+- **Custom build logic**: Custom steps (`Step.init(.{ .id = .custom, .makeFn = ... })`) and `b.build_root`/`b.install_prefix` are gone. Put the logic in a helper under `tools/` and run it with `b.addRunArtifact(...)` (see `tools/install_release.zig`).
 
 ## Key conventions
 
