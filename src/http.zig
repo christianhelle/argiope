@@ -72,7 +72,7 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
         var redirect_buf: [16 * 1024]u8 = undefined;
         var response = req.receiveHead(&redirect_buf) catch return error.ConnectionFailed;
 
-        const status: u16 = @intFromEnum(response.head.status);
+        const status: u16 = @backingInt(response.head.status);
 
         // Follow redirects manually so we can drain the body with a real buffer.
         if (status >= 300 and status < 400) {
@@ -163,7 +163,7 @@ pub fn checkStatus(io: std.Io, allocator: std.mem.Allocator, url_str: []const u8
         .location = .{ .url = url_str },
     }) catch return error.ConnectionFailed;
 
-    return @intFromEnum(result.status);
+    return @backingInt(result.status);
 }
 
 /// Check if a content-type header indicates HTML content.
