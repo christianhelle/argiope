@@ -382,7 +382,7 @@ pub fn parseChapterList(
 
     // Build the path prefix we're searching for: /manga/{slug}/
     var prefix_buf: [512]u8 = undefined;
-    const prefix = std.fmt.bufPrint(&prefix_buf, "/manga/{s}/", .{slug}) catch |e| {
+    const prefix = std.mem.print(&prefix_buf, "/manga/{s}/", .{slug}) catch |e| {
         if (e == error.NoSpaceLeft) return error.SlugTooLong;
         return e;
     };
@@ -576,7 +576,7 @@ pub fn parseChapterListFromRss(
 
     // Build the path prefix we're searching for: /manga/{slug}/
     var prefix_buf: [512]u8 = undefined;
-    const prefix = std.fmt.bufPrint(&prefix_buf, "/manga/{s}/", .{slug}) catch |e| {
+    const prefix = std.mem.print(&prefix_buf, "/manga/{s}/", .{slug}) catch |e| {
         if (e == error.NoSpaceLeft) return error.SlugTooLong;
         return e;
     };
@@ -1189,7 +1189,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
 
         // Create chapter output directory: {output_dir}/{slug}/{chapter.number}/
         var dir_buf: [1024]u8 = undefined;
-        const chapter_dir = std.fmt.bufPrint(&dir_buf, "{s}/{s}/{s}", .{
+        const chapter_dir = std.mem.print(&dir_buf, "{s}/{s}/{s}", .{
             opts.output_dir,
             slug,
             chapter.number,
@@ -1273,7 +1273,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
 
             // Save: {page:0>3}.ext  e.g. 001.jpg
             var name_buf: [32]u8 = undefined;
-            const filename = std.fmt.bufPrint(&name_buf, "{d:0>3}{s}", .{ page, ext }) catch continue;
+            const filename = std.mem.print(&name_buf, "{d:0>3}{s}", .{ page, ext }) catch continue;
 
             out_dir.writeFile(io, .{ .sub_path = filename, .data = img_resp.body }) catch |err| {
                 printErr(io, "Failed to save {s}/{s}: {s}", .{ chapter_dir, filename, @errorName(err) });
@@ -1390,7 +1390,7 @@ fn extractQuotedStringAround(content: []const u8, needle_pos: usize) ?[]const u8
 fn extractAttrValue(tag: []const u8, attr: []const u8) ?[]const u8 {
     var needle_buf: [64]u8 = undefined;
     // Try attr="value"
-    const pat_dq = std.fmt.bufPrint(&needle_buf, "{s}=\"", .{attr}) catch return null;
+    const pat_dq = std.mem.print(&needle_buf, "{s}=\"", .{attr}) catch return null;
     if (std.mem.indexOf(u8, tag, pat_dq)) |p| {
         const val_start = p + pat_dq.len;
         const val_end = std.mem.indexOfScalarPos(u8, tag, val_start, '"') orelse return null;
@@ -1398,7 +1398,7 @@ fn extractAttrValue(tag: []const u8, attr: []const u8) ?[]const u8 {
     }
     // Try attr='value'
     var needle_buf2: [64]u8 = undefined;
-    const pat_sq = std.fmt.bufPrint(&needle_buf2, "{s}='", .{attr}) catch return null;
+    const pat_sq = std.mem.print(&needle_buf2, "{s}='", .{attr}) catch return null;
     if (std.mem.indexOf(u8, tag, pat_sq)) |p| {
         const val_start = p + pat_sq.len;
         const val_end = std.mem.indexOfScalarPos(u8, tag, val_start, '\'') orelse return null;

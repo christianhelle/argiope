@@ -98,7 +98,7 @@ fn readMetadataFile(io: std.Io, allocator: std.mem.Allocator, root_dir: std.Io.D
 fn extractJsonString(allocator: std.mem.Allocator, data: []const u8, key: []const u8) ?[]const u8 {
     // Build search pattern: "key": "
     var search_buf: [128]u8 = undefined;
-    const key_pattern = std.fmt.bufPrint(&search_buf, "\"{s}\": \"", .{key}) catch return null;
+    const key_pattern = std.mem.print(&search_buf, "\"{s}\": \"", .{key}) catch return null;
     const pos = std.mem.indexOf(u8, data, key_pattern) orelse return null;
     const start = pos + key_pattern.len;
 
