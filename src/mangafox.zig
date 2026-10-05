@@ -30,7 +30,7 @@ pub const MangaMetadata = struct {
 const metadata_filename = ".argiope-metadata.json";
 
 fn metadataFilePath(allocator: std.mem.Allocator, output_dir: []const u8, slug: []const u8) ![]u8 {
-    return std.fmt.allocPrint(allocator, "{s}/{s}/{s}", .{ output_dir, slug, metadata_filename });
+    return allocator.print("{s}/{s}/{s}", .{ output_dir, slug, metadata_filename });
 }
 
 fn eqIgnoreAscii(a: []const u8, b: []const u8) bool {
@@ -501,9 +501,9 @@ pub fn parseChapterList(
         else blk: {
             const origin = getOrigin(base_url);
             if (std.mem.endsWith(u8, href, ".html")) {
-                break :blk try std.fmt.allocPrint(allocator, "{s}{s}", .{ origin, href });
+                break :blk try allocator.print("{s}{s}", .{ origin, href });
             } else {
-                break :blk try std.fmt.allocPrint(allocator, "{s}{s}1.html", .{ origin, href });
+                break :blk try allocator.print("{s}{s}1.html", .{ origin, href });
             }
         };
         errdefer allocator.free(abs_url);
@@ -629,7 +629,7 @@ pub fn parseChapterListFromRss(
             std.mem.startsWith(u8, link_url, "https://"))
             try allocator.dupe(u8, link_url)
         else
-            try std.fmt.allocPrint(allocator, "https://fanfox.net{s}", .{link_url});
+            try allocator.print("https://fanfox.net{s}", .{link_url});
         errdefer allocator.free(abs_url);
 
         const number_copy = try allocator.dupe(u8, number_str);
@@ -923,13 +923,13 @@ pub fn buildPageUrl(allocator: std.mem.Allocator, chapter_url: []const u8, page:
     // chapter_url ends with "1.html" — replace the leading digits before ".html"
     const html_ext = ".html";
     const ext_pos = std.mem.lastIndexOf(u8, chapter_url, html_ext) orelse
-        return std.fmt.allocPrint(allocator, "{s}/{d}.html", .{ chapter_url, page });
+        return allocator.print("{s}/{d}.html", .{ chapter_url, page });
 
     // Find last '/' before the page number
     const path_to_ext = chapter_url[0..ext_pos];
     const slash_pos = std.mem.lastIndexOf(u8, path_to_ext, "/") orelse 0;
     const base = chapter_url[0 .. slash_pos + 1];
-    return std.fmt.allocPrint(allocator, "{s}{d}.html", .{ base, page });
+    return allocator.print("{s}{d}.html", .{ base, page });
 }
 
 /// Main entry point: download all (or filtered) chapters of a fanfox.net manga.
@@ -973,7 +973,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
     };
 
     // 1. Try RSS feed first — bypasses JavaScript-rendered chapter lists
-    const rss_url = try std.fmt.allocPrint(allocator, "https://fanfox.net/rss/{s}.xml", .{slug});
+    const rss_url = try allocator.print("https://fanfox.net/rss/{s}.xml", .{slug});
     defer allocator.free(rss_url);
 
     if (opts.verbose) {
@@ -1069,7 +1069,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
                         }
                     };
 
-                    const temp_path = std.fmt.allocPrint(allocator, "{s}.tmp", .{path}) catch |err| blk: {
+                    const temp_path = allocator.print("{s}.tmp", .{path}) catch |err| blk: {
                         try w.print("Warning: failed to compute temporary metadata path: {s}\n", .{@errorName(err)});
                         break :blk null;
                     };
@@ -1363,7 +1363,7 @@ fn getExtension(url_str: []const u8) ?[]const u8 {
 /// Normalize a potentially protocol-relative URL (e.g. "//cdn.host/img.jpg" → "https://cdn.host/img.jpg").
 fn normalizeImageUrl(allocator: std.mem.Allocator, raw: []const u8) ![]u8 {
     if (std.mem.startsWith(u8, raw, "//")) {
-        return std.fmt.allocPrint(allocator, "https:{s}", .{raw});
+        return allocator.print("https:{s}", .{raw});
     }
     return allocator.dupe(u8, raw);
 }
@@ -1551,7 +1551,7 @@ fn decodeChapterfunResponse(allocator: std.mem.Allocator, body: []const u8) !?[]
 
     if (pix_val != null and pvalue_first != null) {
         // pix has no trailing '/', pvalue_first starts with '/' — concatenate directly
-        return try std.fmt.allocPrint(allocator, "https:{s}{s}", .{ pix_val.?, pvalue_first.? });
+        return try allocator.print("https:{s}{s}", .{ pix_val.?, pvalue_first.? });
     }
 
     return null;
@@ -1571,8 +1571,7 @@ fn fetchChapterfunImageUrl(
     const slash = std.mem.lastIndexOf(u8, chapter_url, "/") orelse chapter_url.len;
     const base_dir = chapter_url[0 .. slash + 1];
 
-    const api_url = try std.fmt.allocPrint(
-        allocator,
+    const api_url = try allocator.print(
         "{s}chapterfun.ashx?cid={s}&page={d}&key=",
         .{ base_dir, chapter_id, page },
     );
