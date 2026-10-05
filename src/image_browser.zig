@@ -70,7 +70,7 @@ fn readMetadataFile(io: std.Io, allocator: std.mem.Allocator, root_dir: std.Io.D
     const meta_path = if (rel_path.len == 0)
         metadata_filename
     else
-        try std.fmt.allocPrint(allocator, "{s}/{s}", .{ rel_path, metadata_filename });
+        try allocator.print("{s}/{s}", .{ rel_path, metadata_filename });
     defer if (rel_path.len != 0) allocator.free(meta_path);
 
     const data = root_dir.readFileAlloc(io, meta_path, allocator, .limited(65536)) catch return null;
@@ -651,7 +651,7 @@ fn encodeRelativeUrlAttribute(allocator: std.mem.Allocator, path: []const u8) ![
 
 fn targetPath(allocator: std.mem.Allocator, dir_rel_path: []const u8, file_name: []const u8) ![]u8 {
     if (dir_rel_path.len == 0) return allocator.dupe(u8, file_name);
-    return std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_rel_path, file_name });
+    return allocator.print("{s}/{s}", .{ dir_rel_path, file_name });
 }
 
 fn splitPath(allocator: std.mem.Allocator, path: []const u8) ![][]const u8 {
@@ -1023,9 +1023,9 @@ fn writeDirectoryPage(
     const w = &fw.interface;
 
     const title = if (index == 0)
-        try std.fmt.allocPrint(allocator, "Argiope Image Library — {s}", .{output_dir})
+        try allocator.print("Argiope Image Library — {s}", .{output_dir})
     else
-        try std.fmt.allocPrint(allocator, "{s} — Argiope Image Browser", .{node.name});
+        try allocator.print("{s} — Argiope Image Browser", .{node.name});
     defer allocator.free(title);
 
     const escaped_title = try escapeHtml(allocator, title);
@@ -1033,11 +1033,11 @@ fn writeDirectoryPage(
     try writePageStart(w, escaped_title);
 
     const subtitle = if (index == 0)
-        try std.fmt.allocPrint(allocator, "Browse thumbnails, nested folders, and reader views for downloads stored in {s}.", .{output_dir})
+        try allocator.print("Browse thumbnails, nested folders, and reader views for downloads stored in {s}.", .{output_dir})
     else if (node.rel_path.len == 0)
         try allocator.dupe(u8, "Browse downloaded images.")
     else
-        try std.fmt.allocPrint(allocator, "Folder: {s}", .{node.rel_path});
+        try allocator.print("Folder: {s}", .{node.rel_path});
     defer allocator.free(subtitle);
     const escaped_subtitle = try escapeHtml(allocator, subtitle);
     defer allocator.free(escaped_subtitle);
@@ -1150,20 +1150,20 @@ fn writeReaderPage(
     const metadata = findNearestMetadata(tree, index);
 
     const page_title = if (metadata) |m|
-        try std.fmt.allocPrint(allocator, "Reader — {s}", .{m.title})
+        try allocator.print("Reader — {s}", .{m.title})
     else if (index == 0)
-        try std.fmt.allocPrint(allocator, "Reader — {s}", .{output_dir})
+        try allocator.print("Reader — {s}", .{output_dir})
     else
-        try std.fmt.allocPrint(allocator, "Reader — {s}", .{node.name});
+        try allocator.print("Reader — {s}", .{node.name});
     defer allocator.free(page_title);
     const escaped_page_title = try escapeHtml(allocator, page_title);
     defer allocator.free(escaped_page_title);
     try writePageStart(w, escaped_page_title);
 
     const subtitle = if (index == 0)
-        try std.fmt.allocPrint(allocator, "Reader mode for downloads stored in {s}.", .{output_dir})
+        try allocator.print("Reader mode for downloads stored in {s}.", .{output_dir})
     else
-        try std.fmt.allocPrint(allocator, "Ordered viewer for {s}.", .{node.rel_path});
+        try allocator.print("Ordered viewer for {s}.", .{node.rel_path});
     defer allocator.free(subtitle);
     const escaped_subtitle = try escapeHtml(allocator, subtitle);
     defer allocator.free(escaped_subtitle);
