@@ -56,7 +56,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
     };
 
     // Collect broken links for display
-    var broken: std.ArrayListUnmanaged(usize) = .empty;
+    var broken: std.ArrayList(usize) = .empty;
     defer broken.deinit(allocator);
 
     for (results, 0..) |r, i| {
@@ -84,9 +84,9 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
     if (!silent) {
         // Print broken links table
         if (broken.items.len > 0) {
-            try w.print("{s}\n", .{"-" ** 88});
+            try w.print("{s}\n", .{&@as([88]u8, @splat('-'))});
             try w.print("{s:<8} {s:<10} {s:<10} {s}\n", .{ "Status", "Type", "Time(ms)", "URL" });
-            try w.print("{s}\n", .{"-" ** 88});
+            try w.print("{s}\n", .{&@as([88]u8, @splat('-'))});
             try w.flush();
 
             for (broken.items) |idx| {
@@ -100,7 +100,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
             }
             try w.flush();
 
-            try w.print("{s}\n", .{"-" ** 88});
+            try w.print("{s}\n", .{&@as([88]u8, @splat('-'))});
             try w.flush();
         }
 

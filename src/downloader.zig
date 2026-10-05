@@ -159,7 +159,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
 
             // Build output path: output_dir/page_N/image_N.ext
             var path_buf: [1024]u8 = undefined;
-            const page_dir = std.fmt.bufPrint(&path_buf, "{s}/page_{d}", .{
+            const page_dir = std.mem.print(&path_buf, "{s}/page_{d}", .{
                 opts.output_dir,
                 page_num,
             }) catch continue;
@@ -181,7 +181,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
 
             // Save to file
             var name_buf: [256]u8 = undefined;
-            const filename = std.fmt.bufPrint(&name_buf, "{d}{s}", .{
+            const filename = std.mem.print(&name_buf, "{d}{s}", .{
                 img_num,
                 ext,
             }) catch continue;

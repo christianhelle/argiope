@@ -70,7 +70,7 @@ fn readMetadataFile(io: std.Io, allocator: std.mem.Allocator, root_dir: std.Io.D
     const meta_path = if (rel_path.len == 0)
         metadata_filename
     else
-        try std.fmt.allocPrint(allocator, "{s}/{s}", .{ rel_path, metadata_filename });
+        try allocator.print("{s}/{s}", .{ rel_path, metadata_filename });
     defer if (rel_path.len != 0) allocator.free(meta_path);
 
     const data = root_dir.readFileAlloc(io, meta_path, allocator, .limited(65536)) catch return null;
@@ -98,7 +98,7 @@ fn readMetadataFile(io: std.Io, allocator: std.mem.Allocator, root_dir: std.Io.D
 fn extractJsonString(allocator: std.mem.Allocator, data: []const u8, key: []const u8) ?[]const u8 {
     // Build search pattern: "key": "
     var search_buf: [128]u8 = undefined;
-    const key_pattern = std.fmt.bufPrint(&search_buf, "\"{s}\": \"", .{key}) catch return null;
+    const key_pattern = std.mem.print(&search_buf, "\"{s}\": \"", .{key}) catch return null;
     const pos = std.mem.indexOf(u8, data, key_pattern) orelse return null;
     const start = pos + key_pattern.len;
 
@@ -297,8 +297,8 @@ const DirNode = struct {
     name: []const u8,
     rel_path: []const u8,
     parent: ?usize,
-    subdirs: std.ArrayListUnmanaged(usize) = .empty,
-    images: std.ArrayListUnmanaged(ImageEntry) = .empty,
+    subdirs: std.ArrayList(usize) = .empty,
+    images: std.ArrayList(ImageEntry) = .empty,
     total_images: usize = 0,
     metadata: ?*MangaMetadata = null,
 
@@ -320,7 +320,7 @@ const DirNode = struct {
 
 const SiteTree = struct {
     allocator: std.mem.Allocator,
-    nodes: std.ArrayListUnmanaged(DirNode) = .empty,
+    nodes: std.ArrayList(DirNode) = .empty,
     path_map: std.StringHashMapUnmanaged(usize) = .empty,
 
     fn init(allocator: std.mem.Allocator) !SiteTree {
@@ -348,8 +348,8 @@ const SiteTree = struct {
     fn getOrAddDir(self: *SiteTree, rel_path: []const u8) !usize {
         if (self.path_map.get(rel_path)) |index| return index;
 
-        const name_slice = if (rel_path.len == 0) "" else std.fs.path.basename(rel_path);
-        const parent_rel = std.fs.path.dirname(rel_path) orelse "";
+        const name_slice = if (rel_path.len == 0) "" else std.Io.Dir.path.basename(rel_path);
+        const parent_rel = std.Io.Dir.path.dirname(rel_path) orelse "";
         const parent_index = try self.getOrAddDir(parent_rel);
 
         const name = try self.allocator.dupe(u8, name_slice);
@@ -369,9 +369,9 @@ const SiteTree = struct {
     }
 
     fn addImage(self: *SiteTree, rel_path: []const u8) !void {
-        const parent_rel = std.fs.path.dirname(rel_path) orelse "";
+        const parent_rel = std.Io.Dir.path.dirname(rel_path) orelse "";
         const parent_index = try self.getOrAddDir(parent_rel);
-        const image_name = std.fs.path.basename(rel_path);
+        const image_name = std.Io.Dir.path.basename(rel_path);
 
         try self.nodes.items[parent_index].images.append(self.allocator, .{
             .name = try self.allocator.dupe(u8, image_name),
@@ -529,7 +529,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8
 }
 
 fn isImagePath(name: []const u8) bool {
-    const ext = std.fs.path.extension(name);
+    const ext = std.Io.Dir.path.extension(name);
     if (ext.len == 0) return false;
 
     const image_exts = [_][]const u8{ ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".svg" };
@@ -594,7 +594,7 @@ fn compareDigitRuns(a: []const u8, b: []const u8) i8 {
 }
 
 fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
-    var list: std.ArrayListUnmanaged(u8) = .empty;
+    var list: std.ArrayList(u8) = .empty;
     defer list.deinit(allocator);
 
     for (text) |char| {
@@ -615,7 +615,7 @@ fn escapeHtmlAttribute(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     return escapeHtml(allocator, text);
 }
 
-fn appendPercentEncodedByte(list: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, byte: u8) !void {
+fn appendPercentEncodedByte(list: *std.ArrayList(u8), allocator: std.mem.Allocator, byte: u8) !void {
     const hex = "0123456789ABCDEF";
     try list.append(allocator, '%');
     try list.append(allocator, hex[byte >> 4]);
@@ -627,7 +627,7 @@ fn isUnreservedUrlByte(byte: u8) bool {
 }
 
 fn encodeRelativeUrlPath(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    var list: std.ArrayListUnmanaged(u8) = .empty;
+    var list: std.ArrayList(u8) = .empty;
     defer list.deinit(allocator);
 
     for (path) |byte| {
@@ -651,11 +651,11 @@ fn encodeRelativeUrlAttribute(allocator: std.mem.Allocator, path: []const u8) ![
 
 fn targetPath(allocator: std.mem.Allocator, dir_rel_path: []const u8, file_name: []const u8) ![]u8 {
     if (dir_rel_path.len == 0) return allocator.dupe(u8, file_name);
-    return std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_rel_path, file_name });
+    return allocator.print("{s}/{s}", .{ dir_rel_path, file_name });
 }
 
 fn splitPath(allocator: std.mem.Allocator, path: []const u8) ![][]const u8 {
-    var list: std.ArrayListUnmanaged([]const u8) = .empty;
+    var list: std.ArrayList([]const u8) = .empty;
     errdefer list.deinit(allocator);
 
     var iter = std.mem.tokenizeAny(u8, path, "/\\");
@@ -677,7 +677,7 @@ fn relativeLink(allocator: std.mem.Allocator, from_dir_rel_path: []const u8, tar
     var common: usize = 0;
     while (common < from_parts.len and common < target_parts.len and std.mem.eql(u8, from_parts[common], target_parts[common])) : (common += 1) {}
 
-    var list: std.ArrayListUnmanaged(u8) = .empty;
+    var list: std.ArrayList(u8) = .empty;
     defer list.deinit(allocator);
 
     for (from_parts[common..]) |_| {
@@ -966,7 +966,7 @@ fn writeBreadcrumbs(allocator: std.mem.Allocator, w: anytype, tree: *const SiteT
     defer allocator.free(home_href_attr);
     try w.print("<a href=\"{s}\">Library</a>\n", .{home_href_attr});
 
-    var chain: std.ArrayListUnmanaged(usize) = .empty;
+    var chain: std.ArrayList(usize) = .empty;
     defer chain.deinit(allocator);
 
     var current = tree.nodes.items[index].parent;
@@ -1023,9 +1023,9 @@ fn writeDirectoryPage(
     const w = &fw.interface;
 
     const title = if (index == 0)
-        try std.fmt.allocPrint(allocator, "Argiope Image Library — {s}", .{output_dir})
+        try allocator.print("Argiope Image Library — {s}", .{output_dir})
     else
-        try std.fmt.allocPrint(allocator, "{s} — Argiope Image Browser", .{node.name});
+        try allocator.print("{s} — Argiope Image Browser", .{node.name});
     defer allocator.free(title);
 
     const escaped_title = try escapeHtml(allocator, title);
@@ -1033,11 +1033,11 @@ fn writeDirectoryPage(
     try writePageStart(w, escaped_title);
 
     const subtitle = if (index == 0)
-        try std.fmt.allocPrint(allocator, "Browse thumbnails, nested folders, and reader views for downloads stored in {s}.", .{output_dir})
+        try allocator.print("Browse thumbnails, nested folders, and reader views for downloads stored in {s}.", .{output_dir})
     else if (node.rel_path.len == 0)
         try allocator.dupe(u8, "Browse downloaded images.")
     else
-        try std.fmt.allocPrint(allocator, "Folder: {s}", .{node.rel_path});
+        try allocator.print("Folder: {s}", .{node.rel_path});
     defer allocator.free(subtitle);
     const escaped_subtitle = try escapeHtml(allocator, subtitle);
     defer allocator.free(escaped_subtitle);
@@ -1150,20 +1150,20 @@ fn writeReaderPage(
     const metadata = findNearestMetadata(tree, index);
 
     const page_title = if (metadata) |m|
-        try std.fmt.allocPrint(allocator, "Reader — {s}", .{m.title})
+        try allocator.print("Reader — {s}", .{m.title})
     else if (index == 0)
-        try std.fmt.allocPrint(allocator, "Reader — {s}", .{output_dir})
+        try allocator.print("Reader — {s}", .{output_dir})
     else
-        try std.fmt.allocPrint(allocator, "Reader — {s}", .{node.name});
+        try allocator.print("Reader — {s}", .{node.name});
     defer allocator.free(page_title);
     const escaped_page_title = try escapeHtml(allocator, page_title);
     defer allocator.free(escaped_page_title);
     try writePageStart(w, escaped_page_title);
 
     const subtitle = if (index == 0)
-        try std.fmt.allocPrint(allocator, "Reader mode for downloads stored in {s}.", .{output_dir})
+        try allocator.print("Reader mode for downloads stored in {s}.", .{output_dir})
     else
-        try std.fmt.allocPrint(allocator, "Ordered viewer for {s}.", .{node.rel_path});
+        try allocator.print("Ordered viewer for {s}.", .{node.rel_path});
     defer allocator.free(subtitle);
     const escaped_subtitle = try escapeHtml(allocator, subtitle);
     defer allocator.free(escaped_subtitle);
