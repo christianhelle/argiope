@@ -1,6 +1,6 @@
 # argiope – Copilot Instructions
 
-`argiope` is a web crawler CLI tool written in Zig (minimum version 0.16.0) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`. The `images` command now also generates portable HTML browsing pages (root `library.html`, nested `index.html`, and per-folder `reader.html`) after downloads complete. Release automation updates `snapcraft.yaml` and `src/cli.zig` together.
+`argiope` is a web crawler CLI tool written in Zig (minimum version 0.17.0) for detecting broken links and downloading images from websites. It has no external dependencies — uses only `std`. The `images` command now also generates portable HTML browsing pages (root `library.html`, nested `index.html`, and per-folder `reader.html`) after downloads complete. Release automation updates `snapcraft.yaml` and `src/cli.zig` together.
 
 ## Source Control and Documentation (MANDATORY)
 
@@ -27,13 +27,13 @@ make build                         # alternative via Makefile
 make test
 ```
 
-## Zig 0.16 API Notes
+## Zig 0.17 API Notes
 
-These are critical project conventions for Zig 0.16:
+These are critical project conventions for Zig 0.17:
 
 - **main/process init**: Prefer `pub fn main(init: std.process.Init) !void`; use `init.gpa`, `init.io`, and `init.minimal.args.toSlice(init.arena.allocator())`.
 - **stdout/stderr**: Use `std.Io.File.stdout().writer(io, &buf)` / `stderr`; access via `.interface.print()` and `.interface.flush()`.
-- **ArrayList**: Use `std.ArrayListUnmanaged(T)` with `.empty` init. Methods require explicit allocator: `.append(allocator, item)`, `.toOwnedSlice(allocator)`, `.deinit(allocator)`
+- **ArrayList**: Use `std.ArrayList(T)` (unmanaged; `ArrayListUnmanaged` is deprecated) with `.empty` init. Methods require explicit allocator: `.append(allocator, item)`, `.toOwnedSlice(allocator)`, `.deinit(allocator)`
 - **HashMap**: Use `std.StringHashMapUnmanaged(V)` with `.empty` init. Same explicit allocator pattern.
 - **Allocating writers**: Use `std.Io.Writer.Allocating` for formatted in-memory byte buffers; `ArrayList.writer()` is not available.
 - **Sleep/time**: Use `io.sleep(.fromMilliseconds(n), .awake)` and `std.Io.Timestamp.now(io, .awake)`, not `std.Thread.sleep()` or `std.time.milliTimestamp()`.
@@ -43,6 +43,11 @@ These are critical project conventions for Zig 0.16:
 - **File/Dir I/O**: Use `std.Io.File` / `std.Io.Dir`. Pass `io` explicitly to file and directory operations: `createDirPath(io, ...)`, `openDir(io, ...)`, `createFile(io, ...)`, `writeFile(io, ...)`, `readFileAlloc(io, ..., std.Io.Limit.limited(max))`, and `close(io)`.
 - **Fixed buffers**: Use `std.Io.Writer.fixed(&buf)` and `writer.buffered()` instead of `std.io.fixedBufferStream()`.
 - **Build resources**: Add Windows resource files via `exe.root_module.addWin32ResourceFile(...)`, not on the compile step.
+- **Formatting into memory**: Use `allocator.print(fmt, args)` instead of `std.fmt.allocPrint`, and `std.mem.print(&buf, fmt, args)` instead of `std.fmt.bufPrint`.
+- **Paths**: Use `std.Io.Dir.path` (`basename`, `dirname`, `join`, ...) instead of `std.fs.path`.
+- **Enums**: Use `@backingInt(e)` instead of the deprecated `@intFromEnum(e)`.
+- **Repeated arrays**: Array multiplication (`"-" ** 88`) was removed; use `&@as([88]u8, @splat('-'))`.
+- **Run step args**: Use `run_cmd.addPassthruArgs()` instead of `if (b.args) |args| run_cmd.addArgs(args)`.
 
 ## Key conventions
 
