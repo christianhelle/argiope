@@ -66,6 +66,20 @@ zig build -Doptimize=ReleaseFast
 
 The binary is at `zig-out/bin/argiope`.
 
+To build and install directly to `~/.local/bin`, use the `install-release` step:
+
+```sh
+zig build install-release
+```
+
+The install target defaults to `~/.local/bin` and honors `INSTALL_DIR` or Zig's `--prefix` option. Additional optimization variants are available:
+
+```sh
+zig build install-release-safe
+zig build install-release-fast
+zig build install-debug
+```
+
 Release automation keeps `snapcraft.yaml` and `src/cli.zig` aligned so tagged release builds publish matching package and CLI versions.
 
 ## Usage

@@ -49,6 +49,7 @@ description: |
   - `argiope images https://fanfox.net/manga/title --chapters 1-50` — Download manga chapters 1-50
   - `argiope check https://example.com --report report.html --report-format html` — Generate HTML report for CI pipelines
   - `argiope images https://example.com -o ./archive --parallel --depth 3` — Fast parallel crawling and download
+  - `zig build install-release` — Build and install the ReleaseSmall binary to `~/.local/bin`
 
   **Report Features:**
   Reports include detailed statistics: total URLs checked, OK count, broken count, error count, internal vs external split, and timing information (total time, average/min/max response times). HTML reports are self-contained with inline CSS and styled with status badges.
