@@ -119,7 +119,7 @@ fn parallelWorker(ctx: ParallelWorkerCtx) void {
         const elapsed_ms: u64 = @intCast(std.Io.Timestamp.now(ctx.crawler.io, .awake).toMilliseconds() - t0);
 
         var links_found: usize = 0;
-        var new_urls: std.ArrayListUnmanaged(QueueEntry) = .empty;
+        var new_urls: std.ArrayList(QueueEntry) = .empty;
         defer {
             for (new_urls.items) |u| ctx.alloc.free(u.url);
             new_urls.deinit(ctx.alloc);
@@ -182,8 +182,8 @@ pub const Crawler = struct {
     base_url: []const u8,
     options: CrawlOptions,
     visited: std.StringHashMapUnmanaged(void),
-    results: std.ArrayListUnmanaged(CrawlResult),
-    queue: std.ArrayListUnmanaged(QueueEntry),
+    results: std.ArrayList(CrawlResult),
+    queue: std.ArrayList(QueueEntry),
     base_parsed: ?url_mod.Url,
     client: std.http.Client,
     checked_count: usize,
@@ -446,7 +446,7 @@ pub const Crawler = struct {
         const links = try html_mod.extractLinks(allocator, html_body);
         defer allocator.free(links);
 
-        var images: std.ArrayListUnmanaged([]u8) = .empty;
+        var images: std.ArrayList([]u8) = .empty;
         errdefer {
             for (images.items) |img| allocator.free(img);
             images.deinit(allocator);

@@ -6,7 +6,7 @@ const summary_mod = @import("summary.zig");
 /// Escape HTML special characters in a string.
 /// Caller owns the returned memory.
 fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
-    var list: std.ArrayListUnmanaged(u8) = .empty;
+    var list: std.ArrayList(u8) = .empty;
     defer list.deinit(allocator);
 
     for (text) |char| {

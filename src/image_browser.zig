@@ -297,8 +297,8 @@ const DirNode = struct {
     name: []const u8,
     rel_path: []const u8,
     parent: ?usize,
-    subdirs: std.ArrayListUnmanaged(usize) = .empty,
-    images: std.ArrayListUnmanaged(ImageEntry) = .empty,
+    subdirs: std.ArrayList(usize) = .empty,
+    images: std.ArrayList(ImageEntry) = .empty,
     total_images: usize = 0,
     metadata: ?*MangaMetadata = null,
 
@@ -320,7 +320,7 @@ const DirNode = struct {
 
 const SiteTree = struct {
     allocator: std.mem.Allocator,
-    nodes: std.ArrayListUnmanaged(DirNode) = .empty,
+    nodes: std.ArrayList(DirNode) = .empty,
     path_map: std.StringHashMapUnmanaged(usize) = .empty,
 
     fn init(allocator: std.mem.Allocator) !SiteTree {
@@ -594,7 +594,7 @@ fn compareDigitRuns(a: []const u8, b: []const u8) i8 {
 }
 
 fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
-    var list: std.ArrayListUnmanaged(u8) = .empty;
+    var list: std.ArrayList(u8) = .empty;
     defer list.deinit(allocator);
 
     for (text) |char| {
@@ -615,7 +615,7 @@ fn escapeHtmlAttribute(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     return escapeHtml(allocator, text);
 }
 
-fn appendPercentEncodedByte(list: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, byte: u8) !void {
+fn appendPercentEncodedByte(list: *std.ArrayList(u8), allocator: std.mem.Allocator, byte: u8) !void {
     const hex = "0123456789ABCDEF";
     try list.append(allocator, '%');
     try list.append(allocator, hex[byte >> 4]);
@@ -627,7 +627,7 @@ fn isUnreservedUrlByte(byte: u8) bool {
 }
 
 fn encodeRelativeUrlPath(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    var list: std.ArrayListUnmanaged(u8) = .empty;
+    var list: std.ArrayList(u8) = .empty;
     defer list.deinit(allocator);
 
     for (path) |byte| {
@@ -655,7 +655,7 @@ fn targetPath(allocator: std.mem.Allocator, dir_rel_path: []const u8, file_name:
 }
 
 fn splitPath(allocator: std.mem.Allocator, path: []const u8) ![][]const u8 {
-    var list: std.ArrayListUnmanaged([]const u8) = .empty;
+    var list: std.ArrayList([]const u8) = .empty;
     errdefer list.deinit(allocator);
 
     var iter = std.mem.tokenizeAny(u8, path, "/\\");
@@ -677,7 +677,7 @@ fn relativeLink(allocator: std.mem.Allocator, from_dir_rel_path: []const u8, tar
     var common: usize = 0;
     while (common < from_parts.len and common < target_parts.len and std.mem.eql(u8, from_parts[common], target_parts[common])) : (common += 1) {}
 
-    var list: std.ArrayListUnmanaged(u8) = .empty;
+    var list: std.ArrayList(u8) = .empty;
     defer list.deinit(allocator);
 
     for (from_parts[common..]) |_| {
@@ -966,7 +966,7 @@ fn writeBreadcrumbs(allocator: std.mem.Allocator, w: anytype, tree: *const SiteT
     defer allocator.free(home_href_attr);
     try w.print("<a href=\"{s}\">Library</a>\n", .{home_href_attr});
 
-    var chain: std.ArrayListUnmanaged(usize) = .empty;
+    var chain: std.ArrayList(usize) = .empty;
     defer chain.deinit(allocator);
 
     var current = tree.nodes.items[index].parent;

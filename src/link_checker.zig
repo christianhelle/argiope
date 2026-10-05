@@ -56,7 +56,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
     };
 
     // Collect broken links for display
-    var broken: std.ArrayListUnmanaged(usize) = .empty;
+    var broken: std.ArrayList(usize) = .empty;
     defer broken.deinit(allocator);
 
     for (results, 0..) |r, i| {

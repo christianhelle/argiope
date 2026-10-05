@@ -156,7 +156,7 @@ fn findElementByClass(html: []const u8, class_name: []const u8) ?[]const u8 {
 }
 
 fn extractTextContent(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
-    var result: std.ArrayListUnmanaged(u8) = .empty;
+    var result: std.ArrayList(u8) = .empty;
     errdefer result.deinit(allocator);
 
     var i: usize = 0;
@@ -174,7 +174,7 @@ fn extractTextContent(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
 }
 
 fn normalizeWhitespace(text: []const u8, allocator: std.mem.Allocator) ![]u8 {
-    var result: std.ArrayListUnmanaged(u8) = .empty;
+    var result: std.ArrayList(u8) = .empty;
     defer result.deinit(allocator);
     var in_whitespace = false;
     for (text) |c| {
@@ -291,7 +291,7 @@ pub fn parseMangaMetadata(
 }
 
 fn escapeJsonString(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    var result: std.ArrayListUnmanaged(u8) = .empty;
+    var result: std.ArrayList(u8) = .empty;
     defer result.deinit(allocator);
 
     for (input) |c| {
@@ -371,7 +371,7 @@ pub fn parseChapterList(
     base_url: []const u8,
     verbose: bool,
 ) ![]MangafoxChapter {
-    var chapters: std.ArrayListUnmanaged(MangafoxChapter) = .empty;
+    var chapters: std.ArrayList(MangafoxChapter) = .empty;
     errdefer {
         for (chapters.items) |ch| {
             allocator.free(ch.number);
@@ -565,7 +565,7 @@ pub fn parseChapterListFromRss(
     slug: []const u8,
     verbose: bool,
 ) ![]MangafoxChapter {
-    var chapters: std.ArrayListUnmanaged(MangafoxChapter) = .empty;
+    var chapters: std.ArrayList(MangafoxChapter) = .empty;
     errdefer {
         for (chapters.items) |ch| {
             allocator.free(ch.number);
@@ -677,7 +677,7 @@ pub fn filterChapters(
         return allocator.dupe(MangafoxChapter, chapters);
     }
 
-    var result: std.ArrayListUnmanaged(MangafoxChapter) = .empty;
+    var result: std.ArrayList(MangafoxChapter) = .empty;
     errdefer result.deinit(allocator);
 
     for (chapters) |ch| {
@@ -1481,7 +1481,7 @@ fn decodeChapterfunResponse(allocator: std.mem.Allocator, body: []const u8) !?[]
     const k_string = body[k_start..pos];
 
     // Build k array by splitting on '|'
-    var k_list: std.ArrayListUnmanaged([]const u8) = .empty;
+    var k_list: std.ArrayList([]const u8) = .empty;
     defer k_list.deinit(allocator);
     {
         var it = std.mem.splitScalar(u8, k_string, '|');
@@ -1489,7 +1489,7 @@ fn decodeChapterfunResponse(allocator: std.mem.Allocator, body: []const u8) !?[]
     }
 
     // Decode p_encoded: replace each word token (base-N number) with k_list entry
-    var result: std.ArrayListUnmanaged(u8) = .empty;
+    var result: std.ArrayList(u8) = .empty;
     defer result.deinit(allocator);
 
     var i: usize = 0;
