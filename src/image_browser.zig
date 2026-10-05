@@ -348,8 +348,8 @@ const SiteTree = struct {
     fn getOrAddDir(self: *SiteTree, rel_path: []const u8) !usize {
         if (self.path_map.get(rel_path)) |index| return index;
 
-        const name_slice = if (rel_path.len == 0) "" else std.fs.path.basename(rel_path);
-        const parent_rel = std.fs.path.dirname(rel_path) orelse "";
+        const name_slice = if (rel_path.len == 0) "" else std.Io.Dir.path.basename(rel_path);
+        const parent_rel = std.Io.Dir.path.dirname(rel_path) orelse "";
         const parent_index = try self.getOrAddDir(parent_rel);
 
         const name = try self.allocator.dupe(u8, name_slice);
@@ -369,9 +369,9 @@ const SiteTree = struct {
     }
 
     fn addImage(self: *SiteTree, rel_path: []const u8) !void {
-        const parent_rel = std.fs.path.dirname(rel_path) orelse "";
+        const parent_rel = std.Io.Dir.path.dirname(rel_path) orelse "";
         const parent_index = try self.getOrAddDir(parent_rel);
-        const image_name = std.fs.path.basename(rel_path);
+        const image_name = std.Io.Dir.path.basename(rel_path);
 
         try self.nodes.items[parent_index].images.append(self.allocator, .{
             .name = try self.allocator.dupe(u8, image_name),
@@ -529,7 +529,7 @@ pub fn generate(io: std.Io, allocator: std.mem.Allocator, output_dir: []const u8
 }
 
 fn isImagePath(name: []const u8) bool {
-    const ext = std.fs.path.extension(name);
+    const ext = std.Io.Dir.path.extension(name);
     if (ext.len == 0) return false;
 
     const image_exts = [_][]const u8{ ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".svg" };

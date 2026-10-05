@@ -1062,7 +1062,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, opts: cli_mod.Options) !u8 
                     defer allocator.free(json_buf);
 
                     const cwd = std.Io.Dir.cwd();
-                    const meta_dir = std.fs.path.dirname(path) orelse opts.output_dir;
+                    const meta_dir = std.Io.Dir.path.dirname(path) orelse opts.output_dir;
                     cwd.createDirPath(io, meta_dir) catch |err| {
                         if (err != error.PathAlreadyExists) {
                             try w.print("Warning: could not create metadata directory {s}: {s}\n", .{ meta_dir, @errorName(err) });

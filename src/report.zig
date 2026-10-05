@@ -373,7 +373,7 @@ test "write text report to temp file" {
     defer tmp.cleanup();
     var path_buf: [4096]u8 = undefined;
     const dir_path = path_buf[0..try tmp.dir.realPath(std.testing.io, &path_buf)];
-    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.tmp" });
+    const tmp_path = try std.Io.Dir.path.join(allocator, &.{ dir_path, "report.tmp" });
     defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
@@ -407,7 +407,7 @@ test "write markdown report to temp file" {
     defer tmp.cleanup();
     var path_buf: [4096]u8 = undefined;
     const dir_path = path_buf[0..try tmp.dir.realPath(std.testing.io, &path_buf)];
-    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.md" });
+    const tmp_path = try std.Io.Dir.path.join(allocator, &.{ dir_path, "report.md" });
     defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
@@ -439,7 +439,7 @@ test "write html report to temp file" {
     defer tmp.cleanup();
     var path_buf: [4096]u8 = undefined;
     const dir_path = path_buf[0..try tmp.dir.realPath(std.testing.io, &path_buf)];
-    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report.html" });
+    const tmp_path = try std.Io.Dir.path.join(allocator, &.{ dir_path, "report.html" });
     defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
@@ -475,7 +475,7 @@ test "include-positives includes ok links in text report" {
     defer tmp.cleanup();
     var path_buf: [4096]u8 = undefined;
     const dir_path = path_buf[0..try tmp.dir.realPath(std.testing.io, &path_buf)];
-    const tmp_path = try std.fs.path.join(allocator, &.{ dir_path, "report_pos.tmp" });
+    const tmp_path = try std.Io.Dir.path.join(allocator, &.{ dir_path, "report_pos.tmp" });
     defer allocator.free(tmp_path);
 
     const results = [_]crawler_mod.CrawlResult{
