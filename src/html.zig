@@ -14,7 +14,7 @@ pub const Link = struct {
 /// The returned slices borrow from the input `html` — do not free them individually.
 /// Caller must free the returned slice itself.
 pub fn extractLinks(allocator: std.mem.Allocator, html: []const u8) ![]Link {
-    var links: std.ArrayListUnmanaged(Link) = .empty;
+    var links: std.ArrayList(Link) = .empty;
     errdefer links.deinit(allocator);
 
     var pos: usize = 0;

@@ -72,7 +72,7 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
         var redirect_buf: [16 * 1024]u8 = undefined;
         var response = req.receiveHead(&redirect_buf) catch return error.ConnectionFailed;
 
-        const status: u16 = @intFromEnum(response.head.status);
+        const status: u16 = @backingInt(response.head.status);
 
         // Follow redirects manually so we can drain the body with a real buffer.
         if (status >= 300 and status < 400) {
@@ -100,9 +100,9 @@ pub fn fetch(client: *std.http.Client, allocator: std.mem.Allocator, url_str: []
                 // then copy into location_buf to avoid @memcpy aliasing panics.
                 var build_buf: [4096]u8 = undefined;
                 const built = if (port) |p|
-                    std.fmt.bufPrint(&build_buf, "{s}://{s}:{d}{s}", .{ scheme, host, p, location }) catch return error.ConnectionFailed
+                    std.mem.print(&build_buf, "{s}://{s}:{d}{s}", .{ scheme, host, p, location }) catch return error.ConnectionFailed
                 else
-                    std.fmt.bufPrint(&build_buf, "{s}://{s}{s}", .{ scheme, host, location }) catch return error.ConnectionFailed;
+                    std.mem.print(&build_buf, "{s}://{s}{s}", .{ scheme, host, location }) catch return error.ConnectionFailed;
                 if (built.len > location_buf.len) return error.ConnectionFailed;
                 @memcpy(location_buf[0..built.len], built);
                 break :blk location_buf[0..built.len];
@@ -163,7 +163,7 @@ pub fn checkStatus(io: std.Io, allocator: std.mem.Allocator, url_str: []const u8
         .location = .{ .url = url_str },
     }) catch return error.ConnectionFailed;
 
-    return @intFromEnum(result.status);
+    return @backingInt(result.status);
 }
 
 /// Check if a content-type header indicates HTML content.
