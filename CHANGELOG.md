@@ -2,8 +2,14 @@
 
 ## [Unreleased Changes]
 
+### Features
+- Upgrade to Zig 0.17.0 ([#34](https://github.com/christianhelle/argiope/pull/34)) ([@christianhelle](https://github.com/christianhelle/))
+
+
+## [0.3.6](https://github.com/christianhelle/argiope/releases/tag/0.3.6) (2026-10-12)
+
 ### Merged Pull Requests
-- Add release install build steps ([#32](https://github.com/christianhelle/argiope/pull/32)) ([@christianhelle](https://github.com/christianhelle/))
+- Add optimized install build steps ([#32](https://github.com/christianhelle/argiope/pull/32)) ([@christianhelle](https://github.com/christianhelle/))
 - Add install script usage to README ([#28](https://github.com/christianhelle/argiope/pull/28)) (@Copilot)
 
 ### Features
