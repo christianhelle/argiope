@@ -3,6 +3,7 @@
 ## [Unreleased Changes]
 
 ### Features
+- Upgrade to Zig 0.17.1 ([#35](https://github.com/christianhelle/argiope/pull/35)) ([@christianhelle](https://github.com/christianhelle/))
 - Upgrade to Zig 0.17.0 ([#34](https://github.com/christianhelle/argiope/pull/34)) ([@christianhelle](https://github.com/christianhelle/))
 
 
